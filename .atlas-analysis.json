@@ -1,0 +1,72 @@
+{
+  "projectType": "saas",
+  "projectName": "Iris",
+  "projectDescription": "A comprehensive OSINT (Open Source Intelligence) tool that aggregates multiple free APIs into a unified interface for username searches, reverse image lookups, email verification, domain analysis, and company research.",
+  "theme": "aspen",
+  "primaryColor": "#6366f1",
+  "lightColor": "#818cf8",
+  "darkColor": "#4f46e5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart", "configuration"]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/username-search",
+              "features/image-search",
+              "features/email-lookup",
+              "features/domain-analysis",
+              "features/company-search"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/api-keys",
+              "guides/self-hosting",
+              "guides/privacy"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/overview",
+              "api/username",
+              "api/image",
+              "api/email",
+              "api/domain",
+              "api/company"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Username enumeration across multiple platforms using WhatsMyName, Sherlock, and Maigret",
+    "Reverse image search via Google Lens, Yandex, and Bing with EXIF metadata extraction",
+    "Email verification and breach history lookup using IPQualityScore",
+    "Comprehensive domain analysis including DNS records, WHOIS, SSL certificates, and technology detection",
+    "Company research across UK Companies House, SEC EDGAR, and GLEIF databases",
+    "Privacy-focused design with no user accounts, tracking, or permanent data storage"
+  ],
+  "publicApiSurface": [
+    "POST /api/username/search - Search for username across social platforms",
+    "POST /api/image/upload - Upload image for reverse search",
+    "POST /api/image/analyze - Analyze image with reverse search engines",
+    "POST /api/email/verify - Verify email and check breach history",
+    "POST /api/domain/analyze - Analyze domain security and infrastructure",
+    "POST /api/company/analyze - Search company databases"
+  ]
+}
