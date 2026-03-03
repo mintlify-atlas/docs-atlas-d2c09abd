@@ -1,0 +1,730 @@
+---
+title: Domain Analysis API
+description: Comprehensive domain intelligence including DNS, WHOIS, SSL certificates, security headers, and technology detection
+---
+
+## Overview
+
+The Domain Analysis API performs deep reconnaissance on any domain, providing:
+
+- DNS record resolution (A, AAAA, MX, TXT, NS, CNAME, SOA)
+- WHOIS registration information
+- SSL/TLS certificate details
+- Security header analysis
+- Technology stack detection
+- HTTP response information
+- Subdomain enumeration (optional)
+- Reputation and threat intelligence
+
+<Note>
+This endpoint uses Server-Sent Events (SSE) streaming to provide real-time progress updates as each analysis step completes.
+</Note>
+
+## Endpoint
+
+```
+POST /api/domain/analyze
+```
+
+## Request
+
+### Headers
+
+```
+Content-Type: application/json
+```
+
+### Body Parameters
+
+<ParamField path="domain" type="string" required>
+  Domain name to analyze. Protocol, www prefix, paths, and ports are automatically removed.
+  
+  **Examples**:
+  - `"example.com"`
+  - `"https://www.example.com/path"` → cleaned to `"example.com"`
+  - `"subdomain.example.com:8080"` → cleaned to `"subdomain.example.com"`
+</ParamField>
+
+<ParamField path="options" type="object">
+  Analysis options
+  
+  <Expandable title="options properties">
+    <ParamField path="options.includeSubdomains" type="boolean">
+      Enable subdomain enumeration (adds ~20-30 seconds to analysis)
+      
+      **Default**: `false`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Request Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:3000/api/domain/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "domain": "example.com",
+    "options": {
+      "includeSubdomains": true
+    }
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/domain/analyze', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    domain: 'example.com',
+    options: {
+      includeSubdomains: true
+    }
+  })
+});
+
+// Handle SSE stream
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  
+  const text = decoder.decode(value);
+  const lines = text.split('\\n');
+  
+  for (const line of lines) {
+    if (line.startsWith('data: ')) {
+      const event = JSON.parse(line.slice(6));
+      if (event.type === 'complete') {
+        console.log(event.data.result);
+      }
+    }
+  }
+}
+```
+
+```python Python
+import requests
+import json
+
+url = 'http://localhost:3000/api/domain/analyze'
+data = {
+    'domain': 'example.com',
+    'options': {'includeSubdomains': True}
+}
+
+response = requests.post(url, json=data, stream=True)
+
+for line in response.iter_lines():
+    if line.startswith(b'data: '):
+        event = json.loads(line[6:])
+        if event['type'] == 'complete':
+            print(json.dumps(event['data']['result'], indent=2))
+```
+</CodeGroup>
+
+## Response
+
+The endpoint returns a Server-Sent Events (SSE) stream with `Content-Type: text/event-stream`.
+
+### Event Types
+
+<ResponseField name="progress" type="object">
+  Progress update during analysis
+  
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Always `"progress"`
+    </ResponseField>
+    
+    <ResponseField name="data.step" type="string">
+      Current analysis step (e.g., "Resolving DNS records")
+    </ResponseField>
+    
+    <ResponseField name="data.total" type="number">
+      Total number of steps
+    </ResponseField>
+    
+    <ResponseField name="data.completed" type="number">
+      Number of completed steps
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  Partial result from a completed step
+  
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Always `"result"`
+    </ResponseField>
+    
+    <ResponseField name="data.result" type="object">
+      Partial analysis results (DNS, WHOIS, SSL, etc.)
+    </ResponseField>
+    
+    <ResponseField name="data.completed" type="number">
+      Steps completed
+    </ResponseField>
+    
+    <ResponseField name="data.total" type="number">
+      Total steps
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="complete" type="object">
+  Final complete analysis result
+  
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Always `"complete"`
+    </ResponseField>
+    
+    <ResponseField name="data.result" type="DomainAnalysisResult">
+      See complete result structure below
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="object">
+  Error event
+  
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Always `"error"`
+    </ResponseField>
+    
+    <ResponseField name="data.message" type="string">
+      Error message
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Complete Result Structure
+
+<ResponseField name="DomainAnalysisResult" type="object">
+  <Expandable title="properties">
+    
+    ### Basic Information
+    
+    <ResponseField name="domain" type="string">
+      The analyzed domain
+    </ResponseField>
+    
+    <ResponseField name="analyzedAt" type="string">
+      ISO 8601 timestamp of analysis
+    </ResponseField>
+    
+    <ResponseField name="isAvailable" type="boolean">
+      Whether the domain is available for registration
+    </ResponseField>
+    
+    <ResponseField name="ipAddresses" type="string[]">
+      IPv4 addresses
+    </ResponseField>
+    
+    <ResponseField name="ipv6Addresses" type="string[]">
+      IPv6 addresses
+    </ResponseField>
+    
+    ### DNS Records
+    
+    <ResponseField name="dns" type="object">
+      All DNS records
+      
+      <Expandable title="dns properties">
+        <ResponseField name="a" type="DnsRecord[]">
+          A records (IPv4 addresses)
+        </ResponseField>
+        
+        <ResponseField name="aaaa" type="DnsRecord[]">
+          AAAA records (IPv6 addresses)
+        </ResponseField>
+        
+        <ResponseField name="mx" type="DnsRecord[]">
+          MX records (mail servers) with priority
+        </ResponseField>
+        
+        <ResponseField name="txt" type="DnsRecord[]">
+          TXT records (SPF, DKIM, verification, etc.)
+        </ResponseField>
+        
+        <ResponseField name="ns" type="DnsRecord[]">
+          NS records (nameservers)
+        </ResponseField>
+        
+        <ResponseField name="cname" type="DnsRecord[]">
+          CNAME records (aliases)
+        </ResponseField>
+        
+        <ResponseField name="soa" type="DnsRecord[]">
+          SOA records (zone authority)
+        </ResponseField>
+      </Expandable>
+      
+      Each `DnsRecord` contains:
+      ```typescript
+      {
+        type: 'A' | 'AAAA' | 'MX' | 'TXT' | 'NS' | 'CNAME' | 'SOA',
+        value: string,
+        ttl?: number,
+        priority?: number  // MX records only
+      }
+      ```
+    </ResponseField>
+    
+    ### WHOIS Information
+    
+    <ResponseField name="whois" type="WhoisData">
+      Domain registration information
+      
+      <Expandable title="WhoisData properties">
+        <ResponseField name="domainName" type="string">
+          Domain name
+        </ResponseField>
+        
+        <ResponseField name="registrar" type="string">
+          Domain registrar
+        </ResponseField>
+        
+        <ResponseField name="registrarUrl" type="string">
+          Registrar website
+        </ResponseField>
+        
+        <ResponseField name="creationDate" type="string">
+          Domain creation date
+        </ResponseField>
+        
+        <ResponseField name="expirationDate" type="string">
+          Domain expiration date
+        </ResponseField>
+        
+        <ResponseField name="updatedDate" type="string">
+          Last update date
+        </ResponseField>
+        
+        <ResponseField name="status" type="string[]">
+          Domain status codes
+        </ResponseField>
+        
+        <ResponseField name="nameServers" type="string[]">
+          Authoritative nameservers
+        </ResponseField>
+        
+        <ResponseField name="dnssec" type="string">
+          DNSSEC status
+        </ResponseField>
+        
+        <ResponseField name="registrantOrg" type="string">
+          Registrant organization
+        </ResponseField>
+        
+        <ResponseField name="registrantCountry" type="string">
+          Registrant country
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    ### SSL Certificate
+    
+    <ResponseField name="ssl" type="SslCertificate">
+      SSL/TLS certificate details
+      
+      <Expandable title="SslCertificate properties">
+        <ResponseField name="issuer" type="string">
+          Certificate issuer (e.g., "Let's Encrypt")
+        </ResponseField>
+        
+        <ResponseField name="subject" type="string">
+          Certificate subject (domain)
+        </ResponseField>
+        
+        <ResponseField name="validFrom" type="string">
+          Certificate valid from date
+        </ResponseField>
+        
+        <ResponseField name="validTo" type="string">
+          Certificate expiration date
+        </ResponseField>
+        
+        <ResponseField name="daysUntilExpiry" type="number">
+          Days until certificate expires
+        </ResponseField>
+        
+        <ResponseField name="isExpired" type="boolean">
+          Whether certificate is expired
+        </ResponseField>
+        
+        <ResponseField name="isValid" type="boolean">
+          Whether certificate is currently valid
+        </ResponseField>
+        
+        <ResponseField name="serialNumber" type="string">
+          Certificate serial number
+        </ResponseField>
+        
+        <ResponseField name="fingerprint" type="string">
+          Certificate fingerprint
+        </ResponseField>
+        
+        <ResponseField name="altNames" type="string[]">
+          Subject alternative names (other domains covered)
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    ### Security Headers
+    
+    <ResponseField name="securityHeaders" type="SecurityHeaders">
+      Security header analysis
+      
+      <Expandable title="SecurityHeaders properties">
+        <ResponseField name="hasHsts" type="boolean">
+          Strict-Transport-Security header present
+        </ResponseField>
+        
+        <ResponseField name="hasXFrameOptions" type="boolean">
+          X-Frame-Options header present
+        </ResponseField>
+        
+        <ResponseField name="hasXContentTypeOptions" type="boolean">
+          X-Content-Type-Options header present
+        </ResponseField>
+        
+        <ResponseField name="hasContentSecurityPolicy" type="boolean">
+          Content-Security-Policy header present
+        </ResponseField>
+        
+        <ResponseField name="hasXXssProtection" type="boolean">
+          X-XSS-Protection header present
+        </ResponseField>
+        
+        <ResponseField name="hasReferrerPolicy" type="boolean">
+          Referrer-Policy header present
+        </ResponseField>
+        
+        <ResponseField name="hasPermissionsPolicy" type="boolean">
+          Permissions-Policy header present
+        </ResponseField>
+        
+        <ResponseField name="score" type="number">
+          Overall security score (0-100)
+        </ResponseField>
+        
+        <ResponseField name="details" type="object">
+          Raw header values
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    ### Technology Detection
+    
+    <ResponseField name="technologies" type="TechnologyDetection[]">
+      Detected technologies
+      
+      Each entry contains:
+      ```typescript
+      {
+        name: string,         // e.g., "WordPress", "Cloudflare"
+        category: string,     // e.g., "CMS", "CDN", "Web Server"
+        confidence: number,   // 0-100
+        version?: string,     // e.g., "6.4.2"
+        icon?: string        // Icon URL
+      }
+      ```
+    </ResponseField>
+    
+    ### HTTP Information
+    
+    <ResponseField name="httpStatus" type="number">
+      HTTP status code
+    </ResponseField>
+    
+    <ResponseField name="redirectUrl" type="string">
+      Redirect target URL if applicable
+    </ResponseField>
+    
+    <ResponseField name="serverHeader" type="string">
+      Server header value
+    </ResponseField>
+    
+    <ResponseField name="poweredBy" type="string">
+      X-Powered-By header value
+    </ResponseField>
+    
+    <ResponseField name="responseTime" type="number">
+      Response time in milliseconds
+    </ResponseField>
+    
+    ### Subdomains (if enabled)
+    
+    <ResponseField name="subdomains" type="Subdomain[]">
+      Discovered subdomains
+      
+      Each entry contains:
+      ```typescript
+      {
+        name: string,      // Subdomain (e.g., "api.example.com")
+        ip?: string,       // IP address
+        source: string     // Discovery source
+      }
+      ```
+    </ResponseField>
+    
+    ### Reputation
+    
+    <ResponseField name="reputation" type="object">
+      Threat intelligence and reputation data
+      
+      <Expandable title="reputation properties">
+        <ResponseField name="isMalicious" type="boolean">
+          Known malicious domain
+        </ResponseField>
+        
+        <ResponseField name="isPhishing" type="boolean">
+          Known phishing site
+        </ResponseField>
+        
+        <ResponseField name="isSpam" type="boolean">
+          Associated with spam
+        </ResponseField>
+        
+        <ResponseField name="riskScore" type="number">
+          Overall risk score (0-100)
+        </ResponseField>
+        
+        <ResponseField name="sources" type="string[]">
+          Reputation data sources
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response Example
+
+<CodeGroup>
+```json Progress Event
+{
+  "type": "progress",
+  "data": {
+    "step": "Fetching WHOIS data",
+    "total": 7,
+    "completed": 2
+  }
+}
+```
+
+```json Complete Event
+{
+  "type": "complete",
+  "data": {
+    "result": {
+      "domain": "example.com",
+      "analyzedAt": "2024-03-03T10:30:00Z",
+      "isAvailable": false,
+      "ipAddresses": ["93.184.216.34"],
+      "ipv6Addresses": ["2606:2800:220:1:248:1893:25c8:1946"],
+      "dns": {
+        "a": [
+          {"type": "A", "value": "93.184.216.34", "ttl": 3600}
+        ],
+        "aaaa": [
+          {"type": "AAAA", "value": "2606:2800:220:1:248:1893:25c8:1946", "ttl": 3600}
+        ],
+        "mx": [
+          {"type": "MX", "value": "mail.example.com", "priority": 10, "ttl": 3600}
+        ],
+        "txt": [
+          {"type": "TXT", "value": "v=spf1 include:_spf.example.com ~all", "ttl": 3600}
+        ],
+        "ns": [
+          {"type": "NS", "value": "ns1.example.com", "ttl": 86400}
+        ],
+        "cname": [],
+        "soa": [
+          {"type": "SOA", "value": "ns1.example.com hostmaster.example.com", "ttl": 3600}
+        ]
+      },
+      "whois": {
+        "domainName": "example.com",
+        "registrar": "RESERVED-Internet Assigned Numbers Authority",
+        "creationDate": "1995-08-14T00:00:00Z",
+        "expirationDate": "2025-08-13T00:00:00Z",
+        "updatedDate": "2024-08-14T00:00:00Z",
+        "status": ["clientDeleteProhibited", "clientTransferProhibited"],
+        "nameServers": ["ns1.example.com", "ns2.example.com"],
+        "dnssec": "unsigned"
+      },
+      "ssl": {
+        "issuer": "DigiCert Inc",
+        "subject": "example.com",
+        "validFrom": "2024-01-15T00:00:00Z",
+        "validTo": "2025-01-14T23:59:59Z",
+        "daysUntilExpiry": 317,
+        "isExpired": false,
+        "isValid": true,
+        "altNames": ["example.com", "www.example.com"]
+      },
+      "securityHeaders": {
+        "hasHsts": true,
+        "hasXFrameOptions": true,
+        "hasXContentTypeOptions": true,
+        "hasContentSecurityPolicy": false,
+        "hasXXssProtection": false,
+        "hasReferrerPolicy": true,
+        "hasPermissionsPolicy": false,
+        "score": 57,
+        "details": {
+          "strict-transport-security": "max-age=31536000",
+          "x-frame-options": "DENY"
+        }
+      },
+      "technologies": [
+        {"name": "Cloudflare", "category": "CDN", "confidence": 100},
+        {"name": "Nginx", "category": "Web Server", "confidence": 95}
+      ],
+      "httpStatus": 200,
+      "serverHeader": "nginx",
+      "responseTime": 142,
+      "reputation": {
+        "isMalicious": false,
+        "isPhishing": false,
+        "isSpam": false,
+        "riskScore": 0,
+        "sources": ["Google Safe Browsing"]
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+## Error Responses
+
+<ResponseField name="400" type="Domain required">
+  ```json
+  {
+    "success": false,
+    "error": "Domain is required"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="400" type="Invalid domain format">
+  ```json
+  {
+    "success": false,
+    "error": "Invalid domain format"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="500" type="Request failed">
+  ```json
+  {
+    "success": false,
+    "error": "Request failed"
+  }
+  ```
+</ResponseField>
+
+## Source Code Reference
+
+- API Route: `source/app/api/domain/analyze/route.ts:50`
+- Domain Functions: `source/lib/domain/`
+- Type Definitions: `source/lib/domain/types.ts`
+
+## Performance Notes
+
+<Warning>
+**Timeouts**: Domain analysis can take 10-60 seconds depending on options.
+</Warning>
+
+### Analysis Duration
+
+- **Basic analysis** (no subdomains): 5-10 seconds
+- **With subdomain enumeration**: 25-35 seconds
+- **Subdomain timeout**: 25 seconds (to prevent hanging)
+
+### Optimization Tips
+
+1. **Disable subdomains** for faster results
+2. **Cache results** to avoid redundant analyses
+3. **Parallel requests** are handled by the server
+4. **Streaming updates** provide real-time feedback
+
+## Best Practices
+
+### Recommendations
+
+1. **Domain cleaning**: Submit clean domains (protocol and path are auto-removed)
+2. **Handle timeouts**: Some steps may fail or timeout gracefully
+3. **Cache wisely**: Cache for 1-24 hours depending on use case
+4. **Monitor SSL expiry**: Alert when `daysUntilExpiry` < 30
+5. **Security scoring**: Flag domains with `securityHeaders.score` < 50
+
+## Example Implementation
+
+```typescript
+interface DomainReport {
+  domain: string;
+  status: 'available' | 'registered';
+  sslValid: boolean;
+  sslExpiry?: string;
+  securityScore: number;
+  technologies: string[];
+  riskLevel: 'safe' | 'suspicious' | 'dangerous';
+}
+
+async function analyzeDomainComplete(domain: string): Promise<DomainReport> {
+  const response = await fetch('/api/domain/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ domain })
+  });
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let result: any;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const text = decoder.decode(value);
+    const lines = text.split('\n');
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const event = JSON.parse(line.slice(6));
+        if (event.type === 'complete') {
+          result = event.data.result;
+        }
+      }
+    }
+  }
+
+  // Generate report
+  const report: DomainReport = {
+    domain: result.domain,
+    status: result.isAvailable ? 'available' : 'registered',
+    sslValid: result.ssl?.isValid ?? false,
+    sslExpiry: result.ssl?.validTo,
+    securityScore: result.securityHeaders?.score ?? 0,
+    technologies: result.technologies?.map((t: any) => t.name) ?? [],
+    riskLevel: result.reputation?.isMalicious || result.reputation?.isPhishing
+      ? 'dangerous'
+      : result.reputation?.riskScore > 50
+      ? 'suspicious'
+      : 'safe'
+  };
+
+  return report;
+}
+```

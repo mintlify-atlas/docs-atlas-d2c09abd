@@ -1,0 +1,272 @@
+---
+title: API Overview
+description: Introduction to the Iris OSINT API with authentication and usage guidelines
+---
+
+## Overview
+
+The Iris OSINT API provides programmatic access to powerful open-source intelligence gathering capabilities. All endpoints are built with Next.js API routes and support both JSON and Server-Sent Events (SSE) streaming for real-time progress updates.
+
+## Base URL
+
+```
+http://localhost:3000/api
+```
+
+For production deployments, replace with your deployment URL.
+
+## Authentication
+
+<Note>
+The current API implementation does not require authentication. For production use, implement authentication middleware to secure your endpoints.
+</Note>
+
+### Adding Authentication (Recommended)
+
+For production deployments, consider adding:
+
+- **API Keys**: Bearer token authentication
+- **Rate Limiting**: Prevent abuse with request throttling
+- **CORS Configuration**: Control which domains can access your API
+
+```typescript
+// middleware.ts example
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+export function middleware(request: NextRequest) {
+  const apiKey = request.headers.get('authorization');
+  
+  if (!apiKey || !apiKey.startsWith('Bearer ')) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+  
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: '/api/:path*',
+};
+```
+
+## Response Formats
+
+### JSON Response
+
+Standard endpoints return JSON with the following structure:
+
+<ResponseField name="success" type="boolean">
+  Indicates if the request was successful
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if the request failed (only present on errors)
+</ResponseField>
+
+```json
+{
+  "success": true,
+  "result": { ... }
+}
+```
+
+### Server-Sent Events (SSE)
+
+Streaming endpoints (username search, domain analysis, company analysis) use SSE for real-time updates:
+
+```javascript
+const response = await fetch('/api/username/search', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: 'john_doe' })
+});
+
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  
+  const text = decoder.decode(value);
+  const lines = text.split('\n');
+  
+  for (const line of lines) {
+    if (line.startsWith('data: ')) {
+      const data = JSON.parse(line.slice(6));
+      console.log(data.type, data.data);
+    }
+  }
+}
+```
+
+### SSE Event Types
+
+<Tabs>
+  <Tab title="progress">
+    ```json
+    {
+      "type": "progress",
+      "data": {
+        "step": "Checking domain existence",
+        "total": 8,
+        "completed": 2
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="result">
+    ```json
+    {
+      "type": "result",
+      "data": {
+        "result": { ... },
+        "completed": 3,
+        "total": 8
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="complete">
+    ```json
+    {
+      "type": "complete",
+      "data": {
+        "result": { ... }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="error">
+    ```json
+    {
+      "type": "error",
+      "data": {
+        "message": "Analysis failed"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Error Codes
+
+<ResponseField name="400" type="Bad Request">
+  Invalid request parameters or malformed input
+</ResponseField>
+
+<ResponseField name="500" type="Internal Server Error">
+  Server-side error during processing
+</ResponseField>
+
+### Error Response Format
+
+```json
+{
+  "success": false,
+  "error": "Invalid email format"
+}
+```
+
+## Rate Limits
+
+<Warning>
+No rate limits are enforced by default. Implement rate limiting in production to prevent abuse.
+</Warning>
+
+### Recommended Limits
+
+- **Username Search**: 10 requests per minute
+- **Email Verification**: 20 requests per minute
+- **Domain Analysis**: 5 requests per minute
+- **Image Upload**: 5 requests per minute (max 32MB)
+- **Company Analysis**: 5 requests per minute
+
+## Configuration
+
+Some API endpoints require environment variables:
+
+```bash
+# Image Upload
+IMGBB_API_KEY=your_imgbb_api_key
+MAX_IMAGE_SIZE=32000  # in KB
+IMAGE_EXPIRY=600      # in seconds
+
+# Email Verification
+IPQUALITYSCORE_API_KEY=your_ipqs_api_key
+
+# Company Analysis (UK)
+COMPANIES_HOUSE_API_KEY=your_companies_house_key
+```
+
+## Available Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Username Search" icon="magnifying-glass" href="/api/username">
+    Search for username across OSINT sources
+  </Card>
+  <Card title="Email Verification" icon="envelope" href="/api/email">
+    Verify email validity and check reputation
+  </Card>
+  <Card title="Image Analysis" icon="image" href="/api/image">
+    Upload and extract EXIF metadata from images
+  </Card>
+  <Card title="Domain Analysis" icon="globe" href="/api/domain">
+    Analyze domains with DNS, WHOIS, SSL, and more
+  </Card>
+  <Card title="Company Lookup" icon="building" href="/api/company">
+    Search company registries and filings
+  </Card>
+</CardGroup>
+
+## SDK Support
+
+<Note>
+No official SDK is currently available. Use standard HTTP clients like `fetch`, `axios`, or your language's HTTP library.
+</Note>
+
+### Example: Node.js Client
+
+```javascript
+const fetch = require('node-fetch');
+
+class IrisClient {
+  constructor(baseUrl = 'http://localhost:3000') {
+    this.baseUrl = baseUrl;
+  }
+
+  async verifyEmail(email) {
+    const response = await fetch(`${this.baseUrl}/api/email/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    return await response.json();
+  }
+
+  async analyzeDomain(domain, options = {}) {
+    const response = await fetch(`${this.baseUrl}/api/domain/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain, options })
+    });
+    return response.body; // SSE stream
+  }
+}
+
+module.exports = IrisClient;
+```
+
+## Next Steps
+
+<CardGroup>
+  <Card title="Username Search" icon="user" href="/api/username">
+    Start searching usernames across platforms
+  </Card>
+  <Card title="Email Verification" icon="shield-check" href="/api/email">
+    Verify email addresses and check risk scores
+  </Card>
+</CardGroup>

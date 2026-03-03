@@ -1,0 +1,733 @@
+---
+title: Company Analysis API
+description: Search company registries including UK Companies House, SEC EDGAR, and GLEIF LEI database
+---
+
+## Overview
+
+The Company Analysis API searches multiple official company registries and databases:
+
+- **UK Companies House**: UK company registrations, officers, and filings
+- **GLEIF LEI**: Global Legal Entity Identifier database
+- **SEC EDGAR**: US Securities and Exchange Commission filings
+
+<Note>
+This endpoint uses Server-Sent Events (SSE) streaming to provide real-time results as each data source responds.
+</Note>
+
+<Warning>
+UK Companies House API requires `COMPANIES_HOUSE_API_KEY` environment variable.
+</Warning>
+
+## Endpoint
+
+```
+POST /api/company/analyze
+```
+
+## Request
+
+### Headers
+
+```
+Content-Type: application/json
+```
+
+### Body Parameters
+
+<ParamField path="query" type="string">
+  Company name or search query. Either `query`, `companyNumber`, or `ticker` is required.
+  
+  **Example**: `"Apple Inc"`
+</ParamField>
+
+<ParamField path="companyNumber" type="string">
+  Specific company registration number (UK Companies House or CIK for SEC).
+  
+  **Example**: `"00000789"`
+</ParamField>
+
+<ParamField path="ticker" type="string">
+  Stock ticker symbol (US companies only).
+  
+  **Example**: `"AAPL"`
+</ParamField>
+
+<ParamField path="country" type="string">
+  Target country for registry search. Determines which data sources to query.
+  
+  **Valid values**: `"US"`, `"UK"`
+  
+  **Default**: `"US"`
+  
+  - `"UK"`: Searches Companies House and GLEIF
+  - `"US"`: Searches SEC EDGAR and GLEIF
+</ParamField>
+
+### Request Example
+
+<CodeGroup>
+```bash cURL (US Company)
+curl -X POST http://localhost:3000/api/company/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Apple Inc",
+    "ticker": "AAPL",
+    "country": "US"
+  }'
+```
+
+```bash cURL (UK Company)
+curl -X POST http://localhost:3000/api/company/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "British Airways",
+    "country": "UK"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/company/analyze', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    query: 'Microsoft Corporation',
+    ticker: 'MSFT',
+    country: 'US'
+  })
+});
+
+// Handle SSE stream
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  
+  const text = decoder.decode(value);
+  const lines = text.split('\\n');
+  
+  for (const line of lines) {
+    if (line.startsWith('data: ')) {
+      const event = JSON.parse(line.slice(6));
+      if (event.type === 'complete') {
+        console.log(event.data.result);
+      }
+    }
+  }
+}
+```
+
+```python Python
+import requests
+import json
+
+url = 'http://localhost:3000/api/company/analyze'
+data = {
+    'query': 'Tesla Inc',
+    'ticker': 'TSLA',
+    'country': 'US'
+}
+
+response = requests.post(url, json=data, stream=True)
+
+for line in response.iter_lines():
+    if line.startswith(b'data: '):
+        event = json.loads(line[6:])
+        if event['type'] == 'complete':
+            print(json.dumps(event['data']['result'], indent=2))
+```
+</CodeGroup>
+
+## Response
+
+The endpoint returns a Server-Sent Events (SSE) stream with `Content-Type: text/event-stream`.
+
+### Event Types
+
+<ResponseField name="progress" type="object">
+  Progress update during search
+  
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Always `"progress"`
+    </ResponseField>
+    
+    <ResponseField name="data.step" type="string">
+      Current step (e.g., "Searching UK Companies House")
+    </ResponseField>
+    
+    <ResponseField name="data.source" type="string">
+      Data source: `"companiesHouse"`, `"gleif"`, or `"secEdgar"`
+    </ResponseField>
+    
+    <ResponseField name="data.total" type="number">
+      Total steps
+    </ResponseField>
+    
+    <ResponseField name="data.completed" type="number">
+      Completed steps
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  Partial result from a data source
+  
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Always `"result"`
+    </ResponseField>
+    
+    <ResponseField name="data.source" type="string">
+      Source of this result
+    </ResponseField>
+    
+    <ResponseField name="data.result" type="object">
+      Partial results from one data source
+    </ResponseField>
+    
+    <ResponseField name="data.completed" type="number">
+      Steps completed
+    </ResponseField>
+    
+    <ResponseField name="data.total" type="number">
+      Total steps
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="complete" type="object">
+  Final complete result with all data sources
+  
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Always `"complete"`
+    </ResponseField>
+    
+    <ResponseField name="data.result" type="CompanyAnalysisResult">
+      See complete result structure below
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="object">
+  Error event
+  
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Always `"error"`
+    </ResponseField>
+    
+    <ResponseField name="data.message" type="string">
+      Error message
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Complete Result Structure
+
+<ResponseField name="CompanyAnalysisResult" type="object">
+  <Expandable title="properties">
+    
+    <ResponseField name="query" type="string">
+      The search query used
+    </ResponseField>
+    
+    <ResponseField name="analyzedAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    ### UK Companies House
+    
+    <ResponseField name="companiesHouse" type="object">
+      UK company registry data (only for country: "UK")
+      
+      <Expandable title="properties">
+        <ResponseField name="searchResults" type="array">
+          Search results matching the query
+          
+          Each result:
+          ```typescript
+          {
+            company_number: string,
+            title: string,
+            company_status: string,
+            company_type: string,
+            date_of_creation?: string,
+            address_snippet?: string
+          }
+          ```
+        </ResponseField>
+        
+        <ResponseField name="company" type="CompaniesHouseCompany">
+          Full company details (first match)
+          
+          <Expandable title="CompaniesHouseCompany properties">
+            <ResponseField name="company_number" type="string">
+              UK company number
+            </ResponseField>
+            
+            <ResponseField name="company_name" type="string">
+              Official company name
+            </ResponseField>
+            
+            <ResponseField name="company_status" type="string">
+              Status ("active", "dissolved", etc.)
+            </ResponseField>
+            
+            <ResponseField name="company_type" type="string">
+              Type ("ltd", "plc", etc.)
+            </ResponseField>
+            
+            <ResponseField name="date_of_creation" type="string">
+              Incorporation date
+            </ResponseField>
+            
+            <ResponseField name="registered_office_address" type="object">
+              Registered address
+            </ResponseField>
+            
+            <ResponseField name="sic_codes" type="string[]">
+              Standard Industrial Classification codes
+            </ResponseField>
+            
+            <ResponseField name="accounts" type="object">
+              Accounting information and deadlines
+            </ResponseField>
+            
+            <ResponseField name="has_charges" type="boolean">
+              Whether company has charges registered
+            </ResponseField>
+            
+            <ResponseField name="has_insolvency_history" type="boolean">
+              Insolvency history flag
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+        
+        <ResponseField name="officers" type="CompaniesHouseOfficer[]">
+          Company officers (directors, secretaries)
+          
+          Each officer:
+          ```typescript
+          {
+            name: string,
+            officer_role: string,
+            appointed_on?: string,
+            resigned_on?: string,
+            nationality?: string,
+            country_of_residence?: string,
+            occupation?: string,
+            date_of_birth?: { month: number, year: number }
+          }
+          ```
+        </ResponseField>
+        
+        <ResponseField name="filings" type="CompaniesHouseFiling[]">
+          Recent company filings
+          
+          Each filing:
+          ```typescript
+          {
+            category: string,
+            date: string,
+            description: string,
+            type: string
+          }
+          ```
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    ### GLEIF LEI Database
+    
+    <ResponseField name="gleif" type="object">
+      Global Legal Entity Identifier data (always included)
+      
+      <Expandable title="properties">
+        <ResponseField name="records" type="GleifLeiRecord[]">
+          LEI records matching the query
+          
+          Each record:
+          ```typescript
+          {
+            lei: string,  // Legal Entity Identifier
+            entity: {
+              legalName: { name: string, language?: string },
+              legalAddress: {
+                addressLines: string[],
+                city: string,
+                country: string,
+                postalCode?: string
+              },
+              jurisdiction?: string,
+              category?: string,
+              status: string
+            },
+            registration: {
+              initialRegistrationDate: string,
+              lastUpdateDate: string,
+              status: string,
+              managingLou: string
+            }
+          }
+          ```
+        </ResponseField>
+        
+        <ResponseField name="totalCount" type="number">
+          Total matching records
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    ### SEC EDGAR
+    
+    <ResponseField name="secEdgar" type="object">
+      US SEC filings data (only for country: "US")
+      
+      <Expandable title="properties">
+        <ResponseField name="searchResults" type="array">
+          Search results
+          
+          Each result:
+          ```typescript
+          {
+            cik: string,       // Central Index Key
+            name: string,
+            tickers?: string[]
+          }
+          ```
+        </ResponseField>
+        
+        <ResponseField name="company" type="SecEdgarCompany">
+          Full company details
+          
+          <Expandable title="SecEdgarCompany properties">
+            <ResponseField name="cik" type="string">
+              Central Index Key
+            </ResponseField>
+            
+            <ResponseField name="name" type="string">
+              Company name
+            </ResponseField>
+            
+            <ResponseField name="tickers" type="string[]">
+              Stock ticker symbols
+            </ResponseField>
+            
+            <ResponseField name="exchanges" type="string[]">
+              Stock exchanges
+            </ResponseField>
+            
+            <ResponseField name="sic" type="string">
+              Standard Industrial Classification
+            </ResponseField>
+            
+            <ResponseField name="sicDescription" type="string">
+              Industry description
+            </ResponseField>
+            
+            <ResponseField name="fiscalYearEnd" type="string">
+              Fiscal year end (MMDD format)
+            </ResponseField>
+            
+            <ResponseField name="stateOfIncorporation" type="string">
+              State code
+            </ResponseField>
+            
+            <ResponseField name="businessAddress" type="object">
+              Business address
+            </ResponseField>
+            
+            <ResponseField name="phone" type="string">
+              Phone number
+            </ResponseField>
+            
+            <ResponseField name="website" type="string">
+              Company website
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+        
+        <ResponseField name="recentFilings" type="SecEdgarFiling[]">
+          Recent SEC filings
+          
+          Each filing:
+          ```typescript
+          {
+            accessionNumber: string,
+            filingDate: string,
+            reportDate?: string,
+            form: string,  // e.g., "10-K", "8-K", "10-Q"
+            primaryDocument?: string,
+            items?: string,
+            size?: number
+          }
+          ```
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    ### Errors
+    
+    <ResponseField name="errors" type="object">
+      Errors from individual data sources (omitted if no errors)
+      
+      ```typescript
+      {
+        companiesHouse?: string,
+        gleif?: string,
+        secEdgar?: string
+      }
+      ```
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response Example
+
+<CodeGroup>
+```json Progress Event
+{
+  "type": "progress",
+  "data": {
+    "step": "Searching SEC EDGAR",
+    "source": "secEdgar",
+    "total": 2,
+    "completed": 1
+  }
+}
+```
+
+```json Complete Event (US Company)
+{
+  "type": "complete",
+  "data": {
+    "result": {
+      "query": "Apple Inc",
+      "analyzedAt": "2024-03-03T10:30:00Z",
+      "gleif": {
+        "records": [
+          {
+            "lei": "HWUPKR0MPOU8FGXBT394",
+            "entity": {
+              "legalName": {"name": "Apple Inc."},
+              "legalAddress": {
+                "addressLines": ["One Apple Park Way"],
+                "city": "Cupertino",
+                "country": "US",
+                "postalCode": "95014"
+              },
+              "jurisdiction": "US-CA",
+              "status": "ACTIVE"
+            },
+            "registration": {
+              "initialRegistrationDate": "2012-06-06",
+              "lastUpdateDate": "2024-03-01",
+              "status": "ISSUED",
+              "managingLou": "5493001KJTIIGC8Y1R12"
+            }
+          }
+        ],
+        "totalCount": 1
+      },
+      "secEdgar": {
+        "company": {
+          "cik": "0000320193",
+          "name": "Apple Inc.",
+          "tickers": ["AAPL"],
+          "exchanges": ["Nasdaq"],
+          "sic": "3571",
+          "sicDescription": "Electronic Computers",
+          "fiscalYearEnd": "0930",
+          "stateOfIncorporation": "CA",
+          "businessAddress": {
+            "street1": "One Apple Park Way",
+            "city": "Cupertino",
+            "stateOrCountry": "CA",
+            "zipCode": "95014"
+          },
+          "phone": "408-996-1010",
+          "website": "https://www.apple.com"
+        },
+        "recentFilings": [
+          {
+            "accessionNumber": "0000320193-24-000010",
+            "filingDate": "2024-02-02",
+            "reportDate": "2023-12-30",
+            "form": "10-Q",
+            "primaryDocument": "aapl-20231230.htm",
+            "size": 5243156
+          }
+        ]
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+## Error Responses
+
+<ResponseField name="400" type="Required parameter missing">
+  ```json
+  {
+    "success": false,
+    "error": "Company name, number, or ticker is required"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="500" type="Request failed">
+  ```json
+  {
+    "success": false,
+    "error": "Request failed"
+  }
+  ```
+</ResponseField>
+
+## Configuration
+
+For UK Companies House access:
+
+```bash
+# Optional: UK Companies House API key
+COMPANIES_HOUSE_API_KEY=your_companies_house_key
+```
+
+<Note>
+Get a Companies House API key at [https://developer.company-information.service.gov.uk/](https://developer.company-information.service.gov.uk/)
+</Note>
+
+## Source Code Reference
+
+- API Route: `source/app/api/company/analyze/route.ts:15`
+- Companies House: `source/lib/company/companies-house.ts`
+- SEC EDGAR: `source/lib/company/sec-edgar.ts`
+- GLEIF: `source/lib/company/gleif.ts`
+- Type Definitions: `source/lib/company/types.ts`
+
+## Data Source Coverage
+
+<Tabs>
+  <Tab title="UK (Companies House)">
+    **Coverage**: All UK registered companies
+    
+    **Data includes**:
+    - Company registration details
+    - Directors and officers
+    - Filings and accounts
+    - Charges and insolvency
+    - SIC codes
+    
+    **Requires**: API key
+  </Tab>
+  <Tab title="US (SEC EDGAR)">
+    **Coverage**: US public companies
+    
+    **Data includes**:
+    - Company information
+    - Stock tickers
+    - SEC filings (10-K, 10-Q, 8-K, etc.)
+    - Business address
+    - SIC classification
+    
+    **Requires**: No API key
+  </Tab>
+  <Tab title="Global (GLEIF)">
+    **Coverage**: 2+ million global entities
+    
+    **Data includes**:
+    - Legal Entity Identifiers (LEI)
+    - Legal names and addresses
+    - Jurisdiction and status
+    - Registration dates
+    
+    **Requires**: No API key
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+### Recommendations
+
+1. **Specify country**: Set correct `country` parameter for better results
+2. **Use ticker for speed**: US ticker lookups are faster than name searches
+3. **Handle partial results**: Some data sources may fail or timeout
+4. **Cache results**: Company data changes infrequently
+5. **Check errors field**: Individual sources may fail without blocking others
+
+## Example Implementation
+
+```typescript
+interface CompanySummary {
+  name: string;
+  country: string;
+  status: string;
+  officers?: string[];
+  lei?: string;
+  filings?: number;
+}
+
+async function searchCompany(query: string, country: 'US' | 'UK'): Promise<CompanySummary> {
+  const response = await fetch('/api/company/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, country })
+  });
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let result: any;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const text = decoder.decode(value);
+    const lines = text.split('\n');
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const event = JSON.parse(line.slice(6));
+        if (event.type === 'complete') {
+          result = event.data.result;
+        }
+      }
+    }
+  }
+
+  // Build summary
+  const summary: CompanySummary = {
+    name: query,
+    country,
+    status: 'unknown',
+    officers: [],
+    filings: 0
+  };
+
+  if (country === 'UK' && result.companiesHouse?.company) {
+    const ch = result.companiesHouse;
+    summary.name = ch.company.company_name;
+    summary.status = ch.company.company_status;
+    summary.officers = ch.officers?.map((o: any) => o.name) ?? [];
+    summary.filings = ch.filings?.length ?? 0;
+  } else if (country === 'US' && result.secEdgar?.company) {
+    const sec = result.secEdgar;
+    summary.name = sec.company.name;
+    summary.status = 'active';  // SEC only lists active companies
+    summary.filings = sec.recentFilings?.length ?? 0;
+  }
+
+  if (result.gleif?.records?.[0]) {
+    summary.lei = result.gleif.records[0].lei;
+  }
+
+  return summary;
+}
+```

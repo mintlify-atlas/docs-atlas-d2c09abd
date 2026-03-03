@@ -1,0 +1,149 @@
+---
+title: API Keys Configuration
+description: How to obtain and configure API keys for Iris OSINT tool
+---
+
+Iris uses several free API services to provide comprehensive OSINT capabilities. While some features work without API keys, you'll need to configure these keys to unlock the full functionality.
+
+## Features That Don't Require API Keys
+
+<Info>
+The following features work out of the box without any API configuration:
+- Domain analysis (uses public DNS/WHOIS)
+- SEC EDGAR searches (free, no key needed)
+- GLEIF LEI lookup (free, no key needed)
+- Username search (uses public APIs)
+</Info>
+
+## Required API Keys
+
+To enable all features, you'll need three free API keys. Follow the steps below to obtain each one.
+
+<Steps>
+  <Step title="ImgBB API Key">
+    **Purpose:** Temporary image hosting for reverse image search
+
+    ImgBB is used to temporarily store uploaded images during reverse image search operations. Images are automatically deleted after 10 minutes.
+
+    1. Visit [https://api.imgbb.com/](https://api.imgbb.com/)
+    2. Sign up for a free account
+    3. Navigate to your API dashboard
+    4. Copy your API key
+
+    <Note>
+    The free ImgBB plan supports images up to 32MB. Premium plans allow larger files.
+    </Note>
+  </Step>
+
+  <Step title="IPQualityScore API Key">
+    **Purpose:** Email verification and reputation analysis
+
+    IPQualityScore provides email validation, breach history checking, and reputation scoring.
+
+    1. Go to [https://www.ipqualityscore.com/](https://www.ipqualityscore.com/)
+    2. Create a free account
+    3. Access your dashboard after logging in
+    4. Find your API key in the dashboard
+
+    <Note>
+    The free tier includes a generous monthly quota suitable for most personal use cases.
+    </Note>
+  </Step>
+
+  <Step title="Companies House API Key">
+    **Purpose:** UK company data lookups
+
+    The Companies House API provides access to official UK company registration and filing data.
+
+    1. Visit [https://developer.company-information.service.gov.uk/](https://developer.company-information.service.gov.uk/)
+    2. Create an account
+    3. Register a new REST application
+    4. Copy your API key from the application settings
+
+    <Note>
+    This API key is only needed for UK company searches. Other company search features (SEC EDGAR, GLEIF) work without it.
+    </Note>
+  </Step>
+</Steps>
+
+## Environment Configuration
+
+Once you have your API keys, create a `.env` file in the root directory of your Iris installation:
+
+```env
+# Logging Configuration
+NEXT_PUBLIC_LOG_LEVEL=1  # 0 = disabled, 1 = basic, 2 = debug
+NODE_ENV=production
+
+# ImgBB - Temporary image hosting for reverse search
+IMGBB_API_KEY=your_imgbb_api_key_here
+MAX_IMAGE_SIZE=32000     # Maximum size in KB (32MB default)
+IMAGE_EXPIRY=600         # Auto-delete after 600 seconds (10 minutes)
+
+# IPQualityScore - Email analysis
+IPQS_API_KEY=your_ipqs_api_key_here
+
+# Companies House - UK company data
+COMPANIESHOUSE_API_KEY=your_companies_house_api_key_here
+```
+
+<Warning>
+**Security Best Practices**
+- Never commit your `.env` file to version control
+- Keep your API keys private and secure
+- Rotate keys periodically
+- Use different keys for development and production environments
+</Warning>
+
+## Configuration Options
+
+### Image Upload Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `IMGBB_API_KEY` | - | Your ImgBB API key |
+| `MAX_IMAGE_SIZE` | 32000 | Maximum image size in KB (32MB is ImgBB's free tier limit) |
+| `IMAGE_EXPIRY` | 600 | Time in seconds before images auto-delete (10 minutes) |
+
+### Logging Configuration
+
+| Variable | Options | Description |
+|----------|---------|-------------|
+| `NEXT_PUBLIC_LOG_LEVEL` | 0, 1, 2 | 0 = disabled, 1 = basic, 2 = debug |
+| `NODE_ENV` | development, production | Application environment |
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="API key not working">
+    1. Verify the key is copied correctly with no extra spaces
+    2. Check that the key is active in the provider's dashboard
+    3. Ensure you haven't exceeded the free tier quota
+    4. Restart the application after updating `.env` file
+  </Accordion>
+
+  <Accordion title="Image uploads failing">
+    1. Confirm your `IMGBB_API_KEY` is set correctly
+    2. Check that image size is under `MAX_IMAGE_SIZE` limit
+    3. Verify image format is supported (JPEG, PNG, GIF, WebP)
+    4. Ensure you haven't exceeded ImgBB's rate limits
+  </Accordion>
+
+  <Accordion title="Email lookups not returning data">
+    1. Verify your `IPQS_API_KEY` is configured
+    2. Check your monthly quota on IPQualityScore dashboard
+    3. Ensure the email format is valid
+    4. Some emails may have limited public data available
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Self-Hosting Guide" icon="server" href="/guides/self-hosting">
+    Deploy Iris on your own infrastructure
+  </Card>
+  <Card title="Privacy & Security" icon="shield" href="/guides/privacy">
+    Learn about data handling and privacy features
+  </Card>
+</CardGroup>

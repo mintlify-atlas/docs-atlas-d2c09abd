@@ -1,0 +1,387 @@
+---
+title: "Email Lookup"
+description: "Verify email addresses and assess fraud risk using IPQualityScore API"
+---
+
+The Email Lookup feature provides comprehensive email address verification and risk assessment using the IPQualityScore (IPQS) fraud detection API.
+
+## How It Works
+
+Email verification analyzes multiple factors to determine if an email address is valid, deliverable, and potentially risky.
+
+<Steps>
+  <Step title="Enter Email Address">
+    Input the email address you want to verify. The email is validated for proper format before analysis.
+  </Step>
+  
+  <Step title="API Analysis">
+    Iris queries the IPQualityScore API, which performs:
+    - DNS validation
+    - SMTP verification
+    - Fraud database lookups
+    - Deliverability checks
+    - Associated data searches
+  </Step>
+  
+  <Step title="Risk Assessment">
+    Results include a comprehensive risk analysis:
+    - Overall risk score (0-100)
+    - Risk level (low, medium, high, critical)
+    - Specific flags (disposable, leaked, spam trap, etc.)
+    - Deliverability status
+  </Step>
+  
+  <Step title="Review Details">
+    Examine detailed information including:
+    - Domain age and reputation
+    - Account creation date
+    - Associated names and data
+    - MX and DNS records
+  </Step>
+</Steps>
+
+## Verification Factors
+
+### Validity Checks
+
+<Accordion title="DNS & MX Records">
+  **Domain Validation:**
+  - Checks if the domain has valid DNS records
+  - Verifies MX (Mail Exchange) records exist
+  - Confirms the domain can receive email
+  
+  ```typescript lib/email/verify.ts:89
+  const result: EmailAnalysisResult = {
+      email: data.sanitized_email || email,
+      isValid: data.valid,
+      deliverability: data.deliverability,
+      hasMxRecords: data.mx_found,
+      hasDnsRecords: data.dns_valid,
+      // ...
+  };
+  ```
+</Accordion>
+
+<Accordion title="SMTP Verification">
+  **Mailbox Validation:**
+  - Connects to mail server
+  - Verifies the mailbox exists
+  - Checks if it accepts mail
+  - SMTP score (0-1) indicating confidence
+  
+  <Info>
+    SMTP verification is performed without sending actual email, using SMTP handshake protocols.
+  </Info>
+</Accordion>
+
+<Accordion title="Syntax & Format">
+  **Email Format Checks:**
+  - RFC 5322 compliance
+  - Special character validation
+  - Length restrictions
+  - Domain format rules
+  
+  The API returns a sanitized version of the email with corrections if needed.
+</Accordion>
+
+### Risk Indicators
+
+<Tabs>
+  <Tab title="Disposable">
+    **Temporary Email Services**
+    
+    Identifies if the email is from a temporary/disposable email service like:
+    - guerrillamail.com
+    - 10minutemail.com
+    - mailinator.com
+    
+    ```typescript lib/email/verify.ts:93
+    isDisposable: data.disposable,
+    ```
+    
+    <Warning>
+      Disposable emails are often used for spam, fraud, or avoiding accountability.
+    </Warning>
+  </Tab>
+  
+  <Tab title="Catch-All">
+    **Accept-All Domains**
+    
+    Detects if the domain accepts email to any address, even non-existent ones.
+    
+    ```typescript lib/email/verify.ts:94
+    isCatchAll: data.catch_all,
+    ```
+    
+    <Note>
+      Catch-all domains make it impossible to verify if a specific mailbox exists.
+    </Note>
+  </Tab>
+  
+  <Tab title="Leaked">
+    **Data Breach Detection**
+    
+    Checks if the email appears in known data breaches.
+    
+    ```typescript lib/email/verify.ts:95
+    isLeaked: data.leaked,
+    ```
+    
+    Sources include:
+    - HaveIBeenPwned database
+    - Known breach datasets
+    - Dark web monitoring
+  </Tab>
+  
+  <Tab title="Spam Trap">
+    **Honeypot Detection**
+    
+    Identifies known spam trap addresses used to catch spammers.
+    
+    ```typescript lib/email/verify.ts:96
+    isSpamTrap: data.spam_trap_score === 'high',
+    isHoneypot: data.honeypot,
+    ```
+    
+    <Warning>
+      Sending to spam traps can damage your sending reputation and cause blacklisting.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Risk Scoring
+
+### Fraud Score Calculation
+
+The fraud score (0-100) is calculated based on multiple factors:
+
+```typescript lib/email/verify.ts:46
+function getRiskLevel(fraudScore: number): 'low' | 'medium' | 'high' | 'critical' {
+    if (fraudScore >= 90) return 'critical';
+    if (fraudScore >= 75) return 'high';
+    if (fraudScore >= 50) return 'medium';
+    return 'low';
+}
+```
+
+<Info>
+  **Risk Level Guidelines:**
+  
+  - **Low (0-49):** Likely legitimate, safe to use
+  - **Medium (50-74):** Some risk indicators present, review carefully
+  - **High (75-89):** Multiple risk factors, likely fraudulent
+  - **Critical (90-100):** Strong fraud indicators, high confidence malicious
+</Info>
+
+### Factors Contributing to Score
+
+1. **Recent Abuse:** Email recently associated with fraudulent activity
+2. **Disposable Status:** Using temporary email service
+3. **Leaked Status:** Found in data breaches
+4. **Spam Trap:** Known honeypot address
+5. **Domain Reputation:** Age and history of the domain
+6. **User Activity:** Historical behavior patterns
+
+## Deliverability Assessment
+
+### Deliverability States
+
+The API returns one of several deliverability statuses:
+
+<Accordion title="Deliverable">
+  Email is valid and can receive messages. High confidence the email will be delivered.
+</Accordion>
+
+<Accordion title="Undeliverable">
+  Email address does not exist or cannot receive messages. Messages will bounce.
+</Accordion>
+
+<Accordion title="Risky">
+  Email may be valid but has risk indicators. Delivery uncertain, may be flagged as spam.
+</Accordion>
+
+<Accordion title="Unknown">
+  Unable to determine deliverability. Catch-all domains or protected servers often return this status.
+</Accordion>
+
+## Additional Data
+
+### Domain Information
+
+```typescript lib/email/verify.ts:105
+const result: EmailAnalysisResult = {
+    domain,
+    domainAge: data.domain_age?.human,  // e.g., "5 years"
+    suggestedDomain: data.suggested_domain,  // Typo correction
+};
+```
+
+<Note>
+  **Domain Age:** Older domains are generally more trustworthy. Newly registered domains have higher fraud rates.
+</Note>
+
+If you mistype an email domain, the API may suggest a correction:
+- `user@gmial.com` → suggests `gmail.com`
+- `user@yahooo.com` → suggests `yahoo.com`
+
+### Account History
+
+```typescript lib/email/verify.ts:114
+accountAge: data.first_seen?.human,     // When email first observed
+userActivity: data.user_activity || 'unknown',  // Activity level
+```
+
+**User Activity Levels:**
+- **High:** Frequently seen, active online presence
+- **Medium:** Moderate activity level
+- **Low:** Rarely seen, minimal footprint
+- **Unknown:** No historical data available
+
+### Associated Information
+
+```typescript lib/email/verify.ts:117
+associatedNames: data.associated_names?.names || [],
+```
+
+The API may return:
+- Names associated with the email address
+- Historical user data
+- Public information from breaches or leaks
+
+<Warning>
+  Associated data comes from public sources and data breaches. It should be used carefully and in compliance with privacy regulations.
+</Warning>
+
+## Technical Implementation
+
+### API Integration
+
+Iris uses the IPQualityScore Email Validation API:
+
+```typescript lib/email/verify.ts:56
+export async function verifyEmail(email: string): Promise<EmailAnalysisResult> {
+    const apiKey = process.env.IPQS_API_KEY;
+
+    if (!apiKey) {
+        throw new Error('IPQS API key not configured');
+    }
+
+    const url = `${IPQS_API_BASE}/${apiKey}/${encodeURIComponent(email)}?timeout=30&abuse_strictness=1`;
+
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+        },
+    });
+
+    const data: IPQSResponse = await response.json();
+    // ... process response
+}
+```
+
+### Privacy Protection
+
+Email addresses are sanitized in logs:
+
+```typescript lib/email/verify.ts:65
+logger.info('email', 'Verifying email', { 
+    email: email.replace(/(.{3}).*@/, '$1***@') 
+});
+// Example: "johnsmith@gmail.com" → "joh***@gmail.com"
+```
+
+## API Configuration
+
+### Environment Setup
+
+Required environment variable:
+
+```bash
+IPQS_API_KEY=your_api_key_here
+```
+
+<Info>
+  Get your API key from [IPQualityScore](https://www.ipqualityscore.com/create-account). They offer a free tier with limited queries per month.
+</Info>
+
+### Query Parameters
+
+The API is called with specific parameters:
+
+- `timeout=30` - Maximum 30 seconds for SMTP checks
+- `abuse_strictness=1` - Enhanced abuse detection (0-2 scale)
+
+## Use Cases
+
+### Account Registration
+- Block disposable emails from signing up
+- Prevent fake account creation
+- Ensure deliverable contact methods
+
+### Marketing & Communication
+- Clean email lists before campaigns
+- Improve deliverability rates
+- Reduce bounce rates
+
+### Fraud Prevention
+- Detect suspicious registration attempts
+- Identify known fraudulent emails
+- Prevent account takeover attacks
+
+### Compliance
+- Verify business email requirements
+- Ensure GDPR-compliant data collection
+- Maintain data quality standards
+
+## API Usage Example
+
+```typescript
+import { verifyEmail } from '@/lib/email';
+
+try {
+    const result = await verifyEmail('user@example.com');
+    
+    console.log(`Email: ${result.email}`);
+    console.log(`Valid: ${result.isValid}`);
+    console.log(`Risk Level: ${result.riskLevel}`);
+    console.log(`Risk Score: ${result.riskScore}/100`);
+    
+    if (result.isDisposable) {
+        console.log('⚠️ Disposable email detected');
+    }
+    
+    if (result.isLeaked) {
+        console.log('⚠️ Email found in data breaches');
+    }
+    
+    if (result.deliverability !== 'deliverable') {
+        console.log(`⚠️ Deliverability: ${result.deliverability}`);
+    }
+    
+} catch (error) {
+    console.error('Verification failed:', error);
+}
+```
+
+## Limitations & Best Practices
+
+<Warning>
+  **API Rate Limits:**
+  
+  Free tier includes limited queries per month. Monitor your usage to avoid service interruption.
+</Warning>
+
+<Note>
+  **Catch-All Domains:** Some legitimate organizations use catch-all domains (accepting email to any address). This makes individual mailbox verification impossible.
+</Note>
+
+<Info>
+  **Best Practices:**
+  
+  1. Cache results to avoid redundant API calls
+  2. Handle timeouts gracefully (30s max)
+  3. Respect user privacy - don't store sensitive associations
+  4. Combine with other validation methods for critical flows
+  5. Consider the user experience - don't block legitimate users
+</Info>

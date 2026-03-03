@@ -1,0 +1,471 @@
+---
+title: Configuration
+description: Complete guide to configuring Iris environment variables, API keys, and application settings.
+---
+
+# Configuration Guide
+
+Iris uses environment variables to configure application behavior and integrate with third-party APIs. This guide covers all available configuration options.
+
+## Environment File Setup
+
+Iris loads configuration from a `.env` file in the project root. Start by copying the example template:
+
+```bash
+cp .env.example .env
+```
+
+<Warning>
+  Never commit your `.env` file to version control. It's included in `.gitignore` by default to prevent accidental exposure of API keys.
+</Warning>
+
+## Core Configuration
+
+### Logging
+
+Control application logging verbosity:
+
+```env
+NEXT_PUBLIC_LOG_LEVEL=0
+```
+
+**Options:**
+- `0` - Disabled (no console output)
+- `1` - Basic (errors and important events)
+- `2` - Debug (verbose logging for development)
+
+<Info>
+  The `NEXT_PUBLIC_` prefix makes this variable available in both server and client code. Use `2` during development to troubleshoot issues.
+</Info>
+
+**Example Logger Usage:**
+
+```typescript
+// source: app/api/domain/analyze/route.ts:73
+logger.info('domain', 'Starting domain analysis', { domain });
+```
+
+The logger automatically respects the `NEXT_PUBLIC_LOG_LEVEL` setting and formats output with timestamps and context.
+
+### Node Environment
+
+```env
+NODE_ENV=development
+```
+
+**Options:**
+- `development` - Enables hot reload, verbose errors, and debugging tools
+- `production` - Optimizes performance, minimizes output, disables source maps
+
+<Note>
+  Always set `NODE_ENV=production` when deploying to production servers for optimal performance and security.
+</Note>
+
+## Image Search Configuration
+
+Image search requires temporary hosting of uploaded images for reverse search queries.
+
+### ImgBB API Key
+
+**Required for:** Image upload and reverse search functionality
+
+```env
+IMGBB_API_KEY=your_imgbb_api_key_here
+```
+
+<Steps>
+  <Step title="Get API Key">
+    1. Visit https://api.imgbb.com/
+    2. Sign up for a free account
+    3. Copy your API key from the dashboard
+  </Step>
+  
+  <Step title="Add to Environment">
+    Paste your API key into `.env`:
+    ```env
+    IMGBB_API_KEY=abc123def456ghi789
+    ```
+  </Step>
+</Steps>
+
+### Maximum Image Size
+
+```env
+MAX_IMAGE_SIZE=32000
+```
+
+**Format:** Kilobytes (KB)  
+**Default:** 32000 (32 MB)  
+**Range:** 1-32000 (ImgBB free tier limit)
+
+This setting controls the maximum file size for image uploads. Images larger than this limit are rejected before upload.
+
+<Warning>
+  ImgBB's free tier supports up to 32 MB per image. Premium plans allow larger files, but Iris enforces this limit client-side.
+</Warning>
+
+**How it's used:**
+
+```typescript
+// Client-side validation checks MAX_IMAGE_SIZE before uploading
+if (file.size > MAX_IMAGE_SIZE * 1024) {
+    throw new Error(`Image exceeds maximum size of ${MAX_IMAGE_SIZE}KB`);
+}
+```
+
+### Image Expiry Time
+
+```env
+IMAGE_EXPIRY=600
+```
+
+**Format:** Seconds  
+**Default:** 600 (10 minutes)  
+**Range:** 60-15552000 (1 minute to 180 days)
+
+Images uploaded to ImgBB automatically delete after this duration. This minimizes privacy risks by ensuring temporary storage.
+
+**Privacy Impact:**
+- Shorter expiry (60-300s) = Better privacy, may timeout for slow searches
+- Longer expiry (600-3600s) = More time for reverse search, longer exposure
+
+<Info>
+  The default 10 minutes balances privacy with sufficient time for reverse image searches across multiple engines.
+</Info>
+
+## Email Verification Configuration
+
+Email verification uses IPQualityScore for reputation checking and breach detection.
+
+### IPQS API Key
+
+**Required for:** Email verification and analysis
+
+```env
+IPQS_API_KEY=your_ipqs_api_key_here
+```
+
+<Steps>
+  <Step title="Create Account">
+    1. Visit https://www.ipqualityscore.com/
+    2. Sign up for a free account (5,000 lookups/month)
+    3. Verify your email address
+  </Step>
+  
+  <Step title="Get API Key">
+    1. Log in to your dashboard
+    2. Navigate to "API Settings"
+    3. Copy your private API key
+  </Step>
+  
+  <Step title="Configure Iris">
+    Add the key to your `.env` file:
+    ```env
+    IPQS_API_KEY=xyz789abc123def456
+    ```
+  </Step>
+</Steps>
+
+**What IPQS Provides:**
+- Email format validation
+- Disposable email detection
+- Known breach database lookups
+- Spam/fraud risk scoring
+- Domain reputation analysis
+- MX record validation
+
+**API Usage:**
+
+```typescript
+// source: app/api/email/verify/route.ts:28
+const result = await verifyEmail(email.trim().toLowerCase());
+```
+
+The `verifyEmail` function handles IPQS API calls, error handling, and response parsing.
+
+## Company Search Configuration
+
+Company search integrates with UK Companies House for British company data.
+
+### Companies House API Key
+
+**Required for:** UK company lookups
+
+```env
+COMPANIESHOUSE_API_KEY=your_companies_house_api_key_here
+```
+
+<Steps>
+  <Step title="Create Developer Account">
+    1. Visit https://developer.company-information.service.gov.uk/
+    2. Click "Sign in / Register"
+    3. Complete registration
+  </Step>
+  
+  <Step title="Register Application">
+    1. Log in to your developer account
+    2. Navigate to "Your applications"
+    3. Click "Create an application"
+    4. Select "REST API"
+    5. Provide application details
+  </Step>
+  
+  <Step title="Get API Key">
+    1. Your API key appears in the application details
+    2. Add to `.env`:
+    ```env
+    COMPANIESHOUSE_API_KEY=abc123-def456-ghi789
+    ```
+  </Step>
+</Steps>
+
+**Features Without API Key:**
+- SEC EDGAR (US) - No key required
+- GLEIF LEI database - No key required
+- Basic company name search - Limited results
+
+<Note>
+  Companies House API is free for non-commercial use with rate limits of 600 requests per 5 minutes.
+</Note>
+
+## API-Free Features
+
+Many Iris features work without any API keys:
+
+### Domain Analysis
+
+Fully functional without API keys:
+
+```typescript
+// source: app/api/domain/analyze/route.ts:23-48
+function isValidDomain(domain: string): boolean {
+    const domainRegex = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
+    return domainRegex.test(domain);
+}
+
+function cleanDomain(input: string): string {
+    let domain = input.trim().toLowerCase();
+    
+    // Remove protocol
+    domain = domain.replace(/^https?:\/\//, '');
+    
+    // Remove path
+    domain = domain.split('/')[0];
+    
+    // Remove port
+    domain = domain.split(':')[0];
+    
+    // Remove www prefix for consistency
+    domain = domain.replace(/^www\./, '');
+    
+    return domain;
+}
+```
+
+Provides:
+- DNS resolution (A, AAAA, MX, TXT, NS, CNAME, SOA)
+- WHOIS lookups
+- SSL certificate information
+- Security header analysis
+- Technology detection
+- HTTP response analysis
+
+### Username Search
+
+Uses public OSINT databases:
+- WhatsMyName (600+ sites)
+- Sherlock (300+ sites)  
+- Maigret (2500+ sites)
+
+No API keys required.
+
+### Company Search (Partial)
+
+- **SEC EDGAR** - US company filings (no key)
+- **GLEIF** - Global LEI database (no key)
+- **Companies House** - Requires key for detailed UK data
+
+## Configuration Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Security" icon="lock">
+    - Never commit `.env` to git
+    - Use different keys for dev/prod
+    - Rotate keys periodically
+    - Store secrets in vault for production
+  </Card>
+  
+  <Card title="Performance" icon="gauge-high">
+    - Set `NODE_ENV=production` in prod
+    - Disable debug logging (`LOG_LEVEL=0`)
+    - Use shorter image expiry for faster cleanup
+    - Monitor API rate limits
+  </Card>
+  
+  <Card title="Privacy" icon="shield">
+    - Use minimum image expiry needed
+    - Self-host for complete control
+    - Review third-party API privacy policies
+    - Consider VPN for sensitive searches
+  </Card>
+  
+  <Card title="Reliability" icon="circle-check">
+    - Keep API keys valid and funded
+    - Set up monitoring for API failures
+    - Have backup keys for critical services
+    - Test configuration after changes
+  </Card>
+</CardGroup>
+
+## Environment Variable Reference
+
+Complete `.env.example` file:
+
+```env
+# source: .env.example:1-11
+NEXT_PUBLIC_LOG_LEVEL=0 # 0 = disabled 1 = basic 2 = debug
+NODE_ENV=development # development/production
+
+IMGBB_API_KEY= # imgbb used for temporary storing reverse image requests
+MAX_IMAGE_SIZE=32000 # in kb default = 32mb which is the max accepted by imgbb unless you have premium.
+IMAGE_EXPIRY=600 # in seconds, default 600 = 10 minutes
+
+IPQS_API_KEY= # ipqs used for email analysis
+
+COMPANIESHOUSE_API_KEY= # companies house api for uk company data
+```
+
+## Validating Configuration
+
+After configuring your `.env` file, verify it works:
+
+<Steps>
+  <Step title="Check Environment Loading">
+    Start the dev server and check for errors:
+    ```bash
+    npm run dev
+    ```
+  </Step>
+  
+  <Step title="Test API-Free Features">
+    Try domain analysis or username search (no keys needed)
+  </Step>
+  
+  <Step title="Test API-Dependent Features">
+    - Upload an image (tests `IMGBB_API_KEY`)
+    - Verify an email (tests `IPQS_API_KEY`)
+    - Search UK company (tests `COMPANIESHOUSE_API_KEY`)
+  </Step>
+  
+  <Step title="Monitor Logs">
+    Set `NEXT_PUBLIC_LOG_LEVEL=2` to see detailed API interactions
+  </Step>
+</Steps>
+
+## Production Deployment
+
+For production environments:
+
+<Warning>
+  **Critical Production Settings:**
+  
+  ```env
+  NODE_ENV=production
+  NEXT_PUBLIC_LOG_LEVEL=0
+  ```
+  
+  Failing to set these correctly can expose sensitive information or degrade performance.
+</Warning>
+
+**Recommended Production Setup:**
+
+```env
+# Production configuration
+NODE_ENV=production
+NEXT_PUBLIC_LOG_LEVEL=0
+
+# API keys (use secrets manager in cloud environments)
+IMGBB_API_KEY=${IMGBB_API_KEY}
+IPQS_API_KEY=${IPQS_API_KEY}
+COMPANIESHOUSE_API_KEY=${COMPANIESHOUSE_API_KEY}
+
+# Resource limits
+MAX_IMAGE_SIZE=32000
+IMAGE_EXPIRY=600
+```
+
+<Info>
+  When deploying to platforms like Vercel, Railway, or AWS, use their built-in secrets management instead of `.env` files.
+</Info>
+
+## Troubleshooting
+
+### API Key Not Recognized
+
+1. Ensure no spaces around `=` in `.env`
+2. Restart dev server after changes
+3. Verify key is correct (copy-paste errors)
+4. Check API provider dashboard for key status
+
+### Image Upload Fails
+
+```bash
+# Check ImgBB API key is set
+echo $IMGBB_API_KEY
+
+# Test key directly
+curl "https://api.imgbb.com/1/upload?key=YOUR_KEY" -F "image=base64string"
+```
+
+### Email Verification Returns Errors
+
+1. Verify IPQS account is active
+2. Check remaining API credits
+3. Ensure key has email verification permissions
+4. Test with known valid email addresses
+
+### Environment Variables Not Loading
+
+```bash
+# Verify .env file exists
+ls -la .env
+
+# Check file contents (be careful not to expose keys!)
+cat .env | head -n 3
+
+# Ensure Next.js can read it
+rm -rf .next && npm run dev
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api/overview"
+  >
+    Explore all API endpoints and parameters
+  </Card>
+  <Card
+    title="Username Search"
+    icon="user"
+    href="/features/username-search"
+  >
+    Search for usernames across platforms
+  </Card>
+  <Card
+    title="Self-Hosting Guide"
+    icon="server"
+    href="/guides/self-hosting"
+  >
+    Deploy Iris to production environments
+  </Card>
+  <Card
+    title="Privacy & Security"
+    icon="shield"
+    href="/guides/privacy"
+  >
+    Learn about privacy and security features
+  </Card>
+</CardGroup>

@@ -1,0 +1,434 @@
+---
+title: Username Search API
+description: Search for usernames across multiple OSINT sources including WhatsMyName, Sherlock, and Maigret
+---
+
+## Overview
+
+The Username Search API allows you to check username availability across hundreds of social media platforms and websites using multiple OSINT data sources.
+
+<Note>
+This endpoint uses Server-Sent Events (SSE) streaming to provide real-time progress updates as each source is checked.
+</Note>
+
+## Endpoint
+
+```
+POST /api/username/search
+```
+
+## Available Sources
+
+<Tabs>
+  <Tab title="WhatsMyName">
+    Cross-platform username search with comprehensive site coverage.
+    
+    **Coverage**: 500+ platforms  
+    **Speed**: Fast parallel checking
+  </Tab>
+  <Tab title="Sherlock">
+    Hunt usernames across social networks with high accuracy.
+    
+    **Coverage**: 300+ social networks  
+    **Speed**: Medium, prioritizes accuracy
+  </Tab>
+  <Tab title="Maigret">
+    Collect detailed dossier on a person by username.
+    
+    **Coverage**: 2000+ sites  
+    **Speed**: Slower, comprehensive scan
+  </Tab>
+</Tabs>
+
+## Request
+
+### Headers
+
+```
+Content-Type: application/json
+```
+
+### Body Parameters
+
+<ParamField path="username" type="string" required>
+  The username to search for. Must be at least 1 character long.
+  
+  Will be automatically trimmed and converted to lowercase.
+  
+  **Example**: `"john_doe"`
+</ParamField>
+
+<ParamField path="sources" type="string[]">
+  Array of OSINT sources to use. If omitted, all sources will be queried.
+  
+  **Valid values**: `"whatsmyname"`, `"sherlock"`, `"maigret"`
+  
+  **Default**: All sources
+  
+  **Example**: `["whatsmyname", "sherlock"]`
+</ParamField>
+
+### Request Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:3000/api/username/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john_doe",
+    "sources": ["whatsmyname", "sherlock"]
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/username/search', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    username: 'john_doe',
+    sources: ['whatsmyname', 'sherlock']
+  })
+});
+
+// Handle SSE stream
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  
+  const text = decoder.decode(value);
+  const lines = text.split('\\n');
+  
+  for (const line of lines) {
+    if (line.startsWith('data: ')) {
+      const event = JSON.parse(line.slice(6));
+      console.log(event.type, event.data);
+    }
+  }
+}
+```
+
+```python Python
+import requests
+import json
+
+url = 'http://localhost:3000/api/username/search'
+data = {
+    'username': 'john_doe',
+    'sources': ['whatsmyname', 'sherlock']
+}
+
+response = requests.post(url, json=data, stream=True)
+
+for line in response.iter_lines():
+    if line.startswith(b'data: '):
+        event = json.loads(line[6:])
+        print(event['type'], event['data'])
+```
+</CodeGroup>
+
+## Response
+
+The endpoint returns a Server-Sent Events (SSE) stream with `Content-Type: text/event-stream`.
+
+### Event Types
+
+<ResponseField name="progress" type="object">
+  Progress update during username checking
+  
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Always `"progress"`
+    </ResponseField>
+    
+    <ResponseField name="data.total" type="number">
+      Total number of sites to check
+    </ResponseField>
+    
+    <ResponseField name="data.checked" type="number">
+      Number of sites checked so far
+    </ResponseField>
+    
+    <ResponseField name="data.found" type="number">
+      Number of profiles found
+    </ResponseField>
+    
+    <ResponseField name="data.source" type="string">
+      Current OSINT source being used
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  Individual site check result
+  
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Always `"result"`
+    </ResponseField>
+    
+    <ResponseField name="data.result" type="CheckResult">
+      <Expandable title="CheckResult properties">
+        <ResponseField name="site" type="string">
+          Name of the website/platform
+        </ResponseField>
+        
+        <ResponseField name="source" type="string">
+          OSINT source used (whatsmyname, sherlock, maigret)
+        </ResponseField>
+        
+        <ResponseField name="url" type="string">
+          Direct URL to the profile if found
+        </ResponseField>
+        
+        <ResponseField name="status" type="string">
+          Result status: `found`, `not_found`, `error`, or `checking`
+        </ResponseField>
+        
+        <ResponseField name="statusCode" type="number">
+          HTTP status code from the check
+        </ResponseField>
+        
+        <ResponseField name="responseTime" type="number">
+          Response time in milliseconds
+        </ResponseField>
+        
+        <ResponseField name="category" type="string">
+          Platform category (social, forum, gaming, etc.)
+        </ResponseField>
+        
+        <ResponseField name="error" type="string">
+          Error message if status is `error`
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="complete" type="object">
+  Final event indicating all checks are complete
+  
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Always `"complete"`
+    </ResponseField>
+    
+    <ResponseField name="data" type="object">
+      Summary statistics (structure varies by implementation)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="object">
+  Error event if something goes wrong
+  
+  <Expandable title="properties">
+    <ResponseField name="type" type="string">
+      Always `"error"`
+    </ResponseField>
+    
+    <ResponseField name="data.message" type="string">
+      Error message describing what went wrong
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response Example
+
+<CodeGroup>
+```json Progress Event
+{
+  "type": "progress",
+  "data": {
+    "total": 500,
+    "checked": 125,
+    "found": 12,
+    "source": "whatsmyname"
+  }
+}
+```
+
+```json Result Event (Found)
+{
+  "type": "result",
+  "data": {
+    "result": {
+      "site": "GitHub",
+      "source": "whatsmyname",
+      "url": "https://github.com/john_doe",
+      "status": "found",
+      "statusCode": 200,
+      "responseTime": 342,
+      "category": "coding"
+    }
+  }
+}
+```
+
+```json Result Event (Not Found)
+{
+  "type": "result",
+  "data": {
+    "result": {
+      "site": "Twitter",
+      "source": "sherlock",
+      "url": "https://twitter.com/john_doe",
+      "status": "not_found",
+      "statusCode": 404,
+      "responseTime": 187,
+      "category": "social"
+    }
+  }
+}
+```
+
+```json Complete Event
+{
+  "type": "complete",
+  "data": {
+    "total": 500,
+    "checked": 500,
+    "found": 47
+  }
+}
+```
+</CodeGroup>
+
+## Get Available Sources
+
+You can also retrieve the list of available OSINT sources:
+
+```
+GET /api/username/search
+```
+
+### Response
+
+```json
+{
+  "sources": [
+    {
+      "id": "whatsmyname",
+      "name": "WhatsMyName",
+      "description": "Cross-platform username search"
+    },
+    {
+      "id": "sherlock",
+      "name": "Sherlock",
+      "description": "Hunt usernames across social networks"
+    },
+    {
+      "id": "maigret",
+      "name": "Maigret",
+      "description": "Collect dossier on a person by username"
+    }
+  ]
+}
+```
+
+## Error Responses
+
+<ResponseField name="400" type="Invalid username">
+  ```json
+  {
+    "error": "Invalid username"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="400" type="No valid sources">
+  ```json
+  {
+    "error": "No valid sources selected"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="500" type="Server error">
+  ```json
+  {
+    "error": "Server error"
+  }
+  ```
+</ResponseField>
+
+## Source Code Reference
+
+The implementation can be found at:
+
+- API Route: `source/app/api/username/search/route.ts:8`
+- Username Checker: `source/lib/username/checker.ts`
+- Type Definitions: `source/lib/username/types/`
+
+## Best Practices
+
+<Warning>
+**Rate Limiting**: Username searches can be resource-intensive. Implement rate limiting to prevent abuse.
+</Warning>
+
+<Note>
+**Caching**: Consider caching results for frequently searched usernames to reduce load.
+</Note>
+
+### Recommendations
+
+1. **Start with fewer sources**: Use `["whatsmyname"]` for faster results
+2. **Handle timeouts**: Some sites may be slow or unresponsive
+3. **Filter results**: Focus on high-confidence matches (status: "found")
+4. **Respect privacy**: Use this tool responsibly and ethically
+
+## Example Implementation
+
+```typescript
+interface CheckResult {
+  site: string;
+  source: string;
+  url: string;
+  status: 'found' | 'not_found' | 'error' | 'checking';
+  statusCode?: number;
+  responseTime?: number;
+  category?: string;
+}
+
+async function searchUsername(username: string) {
+  const results: CheckResult[] = [];
+  
+  const response = await fetch('/api/username/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      username,
+      sources: ['whatsmyname', 'sherlock']
+    })
+  });
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const text = decoder.decode(value);
+    const lines = text.split('\n');
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const event = JSON.parse(line.slice(6));
+        
+        if (event.type === 'result') {
+          results.push(event.data.result);
+        } else if (event.type === 'progress') {
+          console.log(`Progress: ${event.data.checked}/${event.data.total}`);
+        }
+      }
+    }
+  }
+
+  return results.filter(r => r.status === 'found');
+}
+```

@@ -1,0 +1,414 @@
+---
+title: Self-Hosting Guide
+description: Deploy and run Iris OSINT tool on your own infrastructure
+---
+
+Self-hosting Iris gives you complete control over your OSINT environment, ensuring maximum privacy and customization. This guide covers installation, deployment, and best practices.
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+<CardGroup cols={2}>
+  <Card title="Node.js" icon="node-js">
+    Version 18 or higher required
+  </Card>
+  <Card title="Package Manager" icon="box">
+    npm, yarn, or pnpm
+  </Card>
+  <Card title="Git" icon="git-alt">
+    For cloning the repository
+  </Card>
+  <Card title="API Keys" icon="key">
+    Optional but recommended for full functionality
+  </Card>
+</CardGroup>
+
+## Quick Start Installation
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the Iris repository from GitHub:
+
+    ```bash
+    git clone https://github.com/moonlightontheriver/iris.git
+    cd iris
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install required packages using your preferred package manager:
+
+    ```bash
+    npm install
+    ```
+
+    Or with yarn:
+    ```bash
+    yarn install
+    ```
+
+    Or with pnpm:
+    ```bash
+    pnpm install
+    ```
+  </Step>
+
+  <Step title="Configure Environment Variables">
+    Create a `.env` file in the root directory:
+
+    ```bash
+    cp .env.example .env
+    ```
+
+    Edit the `.env` file with your configuration:
+
+    ```env
+    # Logging (0 = off, 1 = basic, 2 = debug)
+    NEXT_PUBLIC_LOG_LEVEL=1
+    NODE_ENV=production
+
+    # ImgBB - for temporary image hosting during reverse search
+    IMGBB_API_KEY=your_imgbb_api_key
+    MAX_IMAGE_SIZE=32000
+    IMAGE_EXPIRY=600
+
+    # IPQualityScore - for email analysis
+    IPQS_API_KEY=your_ipqs_api_key
+
+    # Companies House - for UK company lookups
+    COMPANIESHOUSE_API_KEY=your_companies_house_api_key
+    ```
+
+    <Info>
+    See the [API Keys Configuration](/guides/api-keys) guide for detailed instructions on obtaining these keys.
+    </Info>
+  </Step>
+
+  <Step title="Run the Application">
+    **Development mode:**
+    ```bash
+    npm run dev
+    ```
+
+    **Production build:**
+    ```bash
+    npm run build
+    npm start
+    ```
+
+    The application will be available at `http://localhost:3000`
+  </Step>
+</Steps>
+
+## Deployment Options
+
+### Vercel (Recommended)
+
+The easiest way to deploy Iris is using Vercel's platform:
+
+<Steps>
+  <Step title="Connect Repository">
+    1. Create a [Vercel account](https://vercel.com)
+    2. Import your Iris repository
+    3. Vercel will automatically detect Next.js configuration
+  </Step>
+
+  <Step title="Configure Environment Variables">
+    In your Vercel project settings:
+    1. Navigate to **Settings** → **Environment Variables**
+    2. Add each variable from your `.env` file
+    3. Set variables for Production, Preview, and Development as needed
+  </Step>
+
+  <Step title="Deploy">
+    Click **Deploy** and Vercel will build and deploy your application automatically.
+  </Step>
+</Steps>
+
+### Docker
+
+Create a `Dockerfile` in your project root:
+
+```dockerfile
+FROM node:18-alpine AS base
+
+# Install dependencies
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# Build application
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+RUN npm run build
+
+# Production image
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000
+
+CMD ["node", "server.js"]
+```
+
+Build and run with Docker:
+
+```bash
+# Build the image
+docker build -t iris-osint .
+
+# Run the container
+docker run -p 3000:3000 \
+  -e IMGBB_API_KEY=your_key \
+  -e IPQS_API_KEY=your_key \
+  -e COMPANIESHOUSE_API_KEY=your_key \
+  iris-osint
+```
+
+### Docker Compose
+
+Create a `docker-compose.yml` file:
+
+```yaml
+version: '3.8'
+
+services:
+  iris:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_LOG_LEVEL=1
+      - IMGBB_API_KEY=${IMGBB_API_KEY}
+      - IPQS_API_KEY=${IPQS_API_KEY}
+      - COMPANIESHOUSE_API_KEY=${COMPANIESHOUSE_API_KEY}
+      - MAX_IMAGE_SIZE=32000
+      - IMAGE_EXPIRY=600
+    restart: unless-stopped
+```
+
+Run with:
+```bash
+docker-compose up -d
+```
+
+### Traditional VPS/Server
+
+For deployment on a traditional server (Ubuntu/Debian):
+
+<Steps>
+  <Step title="Install Node.js">
+    ```bash
+    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+    sudo apt-get install -y nodejs
+    ```
+  </Step>
+
+  <Step title="Clone and Install">
+    ```bash
+    git clone https://github.com/moonlightontheriver/iris.git
+    cd iris
+    npm install
+    npm run build
+    ```
+  </Step>
+
+  <Step title="Use Process Manager">
+    Install PM2 for process management:
+
+    ```bash
+    npm install -g pm2
+    pm2 start npm --name "iris" -- start
+    pm2 save
+    pm2 startup
+    ```
+  </Step>
+
+  <Step title="Configure Reverse Proxy">
+    Set up Nginx as a reverse proxy:
+
+    ```nginx
+    server {
+        listen 80;
+        server_name your-domain.com;
+
+        location / {
+            proxy_pass http://localhost:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+        }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Tech Stack
+
+Iris is built with modern web technologies:
+
+| Technology | Version | Purpose |
+|------------|---------|----------|
+| Next.js | 15+ | React framework with server-side rendering |
+| React | 19+ | UI library |
+| TypeScript | 5+ | Type-safe JavaScript |
+| Tailwind CSS | 4+ | Utility-first CSS framework |
+| Framer Motion | 12+ | Animation library |
+| Radix UI | Latest | Accessible component primitives |
+
+## Configuration
+
+### Port Configuration
+
+By default, Iris runs on port 3000. To change this:
+
+```bash
+# Development
+PORT=8080 npm run dev
+
+# Production
+PORT=8080 npm start
+```
+
+### Logging Levels
+
+Control application logging via `NEXT_PUBLIC_LOG_LEVEL`:
+
+- `0` - Disabled (recommended for production)
+- `1` - Basic logging (errors and important events)
+- `2` - Debug mode (verbose logging)
+
+### Image Upload Customization
+
+<Warning>
+If you modify `MAX_IMAGE_SIZE` beyond 32000 KB (32MB), ensure your ImgBB account supports larger files or implement your own image hosting solution.
+</Warning>
+
+```env
+MAX_IMAGE_SIZE=32000  # 32MB - free tier limit
+IMAGE_EXPIRY=600      # 10 minutes - adjust as needed
+```
+
+## Security Considerations
+
+<Steps>
+  <Step title="Environment Variables">
+    - Never commit `.env` files to version control
+    - Use `.env.local` for local development
+    - Set environment variables directly in production hosting
+  </Step>
+
+  <Step title="API Key Security">
+    - Rotate API keys periodically
+    - Use different keys for development and production
+    - Monitor API usage for anomalies
+  </Step>
+
+  <Step title="Server Hardening">
+    - Keep Node.js and dependencies updated
+    - Use HTTPS with valid SSL certificates
+    - Configure firewall rules appropriately
+    - Regular security audits with `npm audit`
+  </Step>
+</Steps>
+
+## Maintenance
+
+### Updating Iris
+
+To update your self-hosted instance:
+
+```bash
+# Pull latest changes
+git pull origin main
+
+# Install new dependencies
+npm install
+
+# Rebuild application
+npm run build
+
+# Restart (PM2 example)
+pm2 restart iris
+```
+
+### Monitoring
+
+Monitor your application health:
+
+```bash
+# View PM2 logs
+pm2 logs iris
+
+# Monitor with PM2
+pm2 monit
+
+# Check application status
+pm2 status
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Build fails with memory error">
+    Increase Node.js memory limit:
+    ```bash
+    NODE_OPTIONS="--max-old-space-size=4096" npm run build
+    ```
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    Change the port or kill the process using it:
+    ```bash
+    # Find process
+    lsof -i :3000
+    
+    # Kill process
+    kill -9 <PID>
+    
+    # Or use different port
+    PORT=3001 npm start
+    ```
+  </Accordion>
+
+  <Accordion title="API keys not being read">
+    1. Ensure `.env` file is in the project root
+    2. Restart the application after changing `.env`
+    3. Check that variable names match exactly
+    4. For Next.js, prefix client-side variables with `NEXT_PUBLIC_`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Keys Configuration" icon="key" href="/guides/api-keys">
+    Set up your API keys for full functionality
+  </Card>
+  <Card title="Privacy & Security" icon="shield" href="/guides/privacy">
+    Understand data handling and privacy features
+  </Card>
+</CardGroup>

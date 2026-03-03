@@ -1,0 +1,200 @@
+---
+title: "Username Search"
+description: "Find social media accounts and online presence across multiple platforms using OSINT sources"
+---
+
+The Username Search feature allows you to discover social media profiles, accounts, and online presence associated with a specific username across hundreds of platforms.
+
+## How It Works
+
+Iris searches for usernames across multiple OSINT (Open Source Intelligence) data sources that maintain databases of platform username patterns and validation rules.
+
+<Steps>
+  <Step title="Enter Username">
+    Input the username you want to search for. Usernames are case-sensitive and should not include the @ symbol.
+  </Step>
+  
+  <Step title="Select OSINT Sources">
+    Choose which OSINT sources to query:
+    - **WhatsMyName** - Community-maintained database of web services
+    - **Sherlock** - Social network username checker
+    - **Maigret** - Extended username search with additional platforms
+  </Step>
+  
+  <Step title="Real-time Results">
+    Watch as Iris checks each platform in real-time using streaming results. Found profiles are displayed immediately with:
+    - Platform name and category
+    - Direct URL to the profile
+    - Response time
+    - HTTP status verification
+  </Step>
+</Steps>
+
+## OSINT Sources
+
+<Tabs>
+  <Tab title="WhatsMyName">
+    WhatsMyName is a community-driven project that maintains a database of websites and platforms where usernames can be checked.
+    
+    **Features:**
+    - 600+ supported sites
+    - Categorized platforms (social, gaming, forums, etc.)
+    - Regular community updates
+    - HTTP-based detection
+  </Tab>
+  
+  <Tab title="Sherlock">
+    Sherlock specializes in finding usernames across social networks using response analysis.
+    
+    **Features:**
+    - 400+ social networks
+    - Response text analysis
+    - Fast parallel checking
+    - Error detection handling
+  </Tab>
+  
+  <Tab title="Maigret">
+    Maigret extends Sherlock with additional platforms and improved detection methods.
+    
+    **Features:**
+    - 2500+ sites
+    - Enhanced detection algorithms
+    - Multi-language support
+    - Deep web searching
+  </Tab>
+</Tabs>
+
+## Technical Implementation
+
+### Search Process
+
+The username checker uses an async generator pattern to stream results in real-time:
+
+```typescript lib/username/checker.ts:27
+export async function* checkUsername(
+    options: UsernameCheckOptions
+): AsyncGenerator<SearchProgress> {
+    const { username, sources, config: customConfig } = options;
+    const config = { ...DEFAULT_CHECKER_CONFIG, ...customConfig };
+
+    const siteCounts = await getSiteCounts();
+    let totalSites = 0; 
+    for (const source of sources) {
+        totalSites += siteCounts[source];
+    }
+
+    yield {
+        type: 'progress',
+        data: { total: totalSites, checked: 0, found: 0 },
+    };
+    // ... continues checking sites
+}
+```
+
+### Result Types
+
+Each check returns a structured result:
+
+```typescript lib/username/types/results.ts:6
+export interface CheckResult {
+    site: string;              // Platform name
+    source: OsintSource;       // Which source found it
+    url: string;               // Direct profile URL
+    status: 'found' | 'not_found' | 'error' | 'checking';
+    statusCode?: number;       // HTTP status code
+    responseTime?: number;     // Time taken in ms
+    error?: string;            // Error message if failed
+    category?: string;         // Platform category
+}
+```
+
+### Progress Streaming
+
+Results are streamed via Server-Sent Events (SSE) for real-time updates:
+
+```typescript lib/username/types/results.ts:20
+export interface SearchProgress {
+    type: 'progress' | 'result' | 'complete' | 'error';
+    data: {
+        total?: number;        // Total sites to check
+        checked?: number;      // Sites checked so far
+        found?: number;        // Profiles found
+        source?: OsintSource;  // Current source
+        result?: CheckResult;  // Individual result
+        message?: string;      // Status message
+    };
+}
+```
+
+## Configuration Options
+
+You can customize the search behavior:
+
+<Accordion title="Timeout Settings">
+  Configure how long to wait for each site to respond before marking it as a timeout.
+  
+  Default: 10 seconds per site
+</Accordion>
+
+<Accordion title="Concurrent Requests">
+  Control how many sites are checked simultaneously to balance speed and reliability.
+  
+  Default: 10 concurrent requests
+</Accordion>
+
+<Accordion title="Retry Logic">
+  Enable automatic retries for failed requests due to network issues.
+  
+  Default: 1 retry attempt
+</Accordion>
+
+## Response Data
+
+<Info>
+  Each found profile includes:
+  - **Direct URL** - Click to visit the profile immediately
+  - **Category** - Platform type (social media, forum, gaming, etc.)
+  - **Response Time** - How quickly the platform responded
+  - **Verification** - HTTP status code confirming the profile exists
+</Info>
+
+## Best Practices
+
+<Warning>
+  **Rate Limiting:** Some platforms may rate-limit requests. If you receive many errors, try:
+  - Using fewer OSINT sources simultaneously
+  - Reducing concurrent requests in settings
+  - Waiting between searches
+</Warning>
+
+<Note>
+  **Username Variations:** Try searching common variations:
+  - With/without underscores: `john_doe` vs `johndoe`
+  - With/without numbers: `john123` vs `john`
+  - Different capitalizations may yield different results on some platforms
+</Note>
+
+## API Usage
+
+You can integrate username search into your own applications:
+
+```typescript
+import { checkUsername, OSINT_SOURCES } from '@/lib/username';
+
+const options = {
+    username: 'johndoe',
+    sources: ['whatsmyname', 'sherlock', 'maigret'],
+};
+
+for await (const progress of checkUsername(options)) {
+    if (progress.type === 'result') {
+        console.log('Found:', progress.data.result);
+    }
+}
+```
+
+## Privacy Considerations
+
+<Warning>
+  This tool queries publicly accessible websites. No authentication or private data access is performed. All information returned is publicly available on the internet.
+</Warning>

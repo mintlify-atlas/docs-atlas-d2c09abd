@@ -1,0 +1,328 @@
+---
+title: "Image Search"
+description: "Perform reverse image searches and extract metadata from photos using multiple search engines"
+---
+
+The Image Search feature enables you to conduct reverse image searches across multiple search engines and extract detailed EXIF metadata from images.
+
+## How It Works
+
+Iris provides two powerful image analysis capabilities:
+
+1. **Reverse Image Search** - Find where an image appears online
+2. **Metadata Extraction** - Extract EXIF data including GPS coordinates, camera info, and more
+
+<Steps>
+  <Step title="Upload or Provide URL">
+    Either upload an image file from your device or provide a publicly accessible image URL.
+  </Step>
+  
+  <Step title="Select Search Engines">
+    Choose which reverse image search engines to use:
+    - Google Lens
+    - Yandex Images
+    - Bing Visual Search
+  </Step>
+  
+  <Step title="Metadata Extraction">
+    Iris automatically extracts EXIF metadata from the image, including:
+    - GPS coordinates (if available)
+    - Camera make and model
+    - Exposure settings
+    - Date and time taken
+    - Image dimensions and format
+  </Step>
+  
+  <Step title="View Results">
+    Access reverse search results in new tabs and review extracted metadata in a structured format.
+  </Step>
+</Steps>
+
+## Search Engines
+
+<Tabs>
+  <Tab title="Google Lens">
+    Google's visual search technology powered by machine learning.
+    
+    **Best For:**
+    - Objects and products
+    - Landmarks and places
+    - Text in images (OCR)
+    - Similar images
+    
+    **Coverage:** Global, billions of indexed images
+  </Tab>
+  
+  <Tab title="Yandex">
+    Russian search engine with excellent facial recognition.
+    
+    **Best For:**
+    - Facial recognition
+    - Eastern European content
+    - Duplicate detection
+    - Cyrillic text
+    
+    **Coverage:** Strong in Russia and CIS countries
+  </Tab>
+  
+  <Tab title="Bing Visual Search">
+    Microsoft's image search with shopping integration.
+    
+    **Best For:**
+    - Shopping and products
+    - Celebrity recognition
+    - Similar images
+    - Related content
+    
+    **Coverage:** Global, integrated with Bing index
+  </Tab>
+</Tabs>
+
+## Metadata Extraction
+
+### EXIF Data Types
+
+Iris extracts comprehensive metadata from images:
+
+<Accordion title="GPS Information">
+  **Location Data:**
+  - Latitude and longitude coordinates
+  - Altitude (if available)
+  - Coordinate format: Decimal degrees
+  
+  ```typescript lib/image/types.ts:6
+  export interface GpsCoordinates {
+      latitude: number;
+      longitude: number;
+      altitude?: number;
+  }
+  ```
+  
+  <Warning>
+    Not all images contain GPS data. Most social media platforms strip location information from uploaded photos for privacy.
+  </Warning>
+</Accordion>
+
+<Accordion title="Camera Information">
+  **Device Details:**
+  - Camera make (e.g., "Canon")
+  - Camera model (e.g., "EOS 5D Mark IV")
+  - Software used (e.g., "Adobe Photoshop")
+  
+  ```typescript lib/image/types.ts:15
+  export interface CameraInfo {
+      make?: string;
+      model?: string;
+      software?: string;
+  }
+  ```
+</Accordion>
+
+<Accordion title="Exposure Settings">
+  **Photography Settings:**
+  - Aperture (f-stop)
+  - Shutter speed
+  - ISO sensitivity
+  - Focal length
+  - Flash status
+  
+  ```typescript lib/image/types.ts:24
+  export interface ExposureInfo {
+      aperture?: string;      // e.g., "f/2.8"
+      shutterSpeed?: string;  // e.g., "1/200s"
+      iso?: number;           // e.g., 400
+      focalLength?: string;   // e.g., "50mm"
+      flash?: string;         // "Fired" or "Not fired"
+  }
+  ```
+</Accordion>
+
+<Accordion title="Basic Properties">
+  **Image Details:**
+  - Width and height (pixels)
+  - File format (JPEG, PNG, etc.)
+  - File size (bytes)
+  - Date taken and modified
+  - Color space (sRGB, Adobe RGB)
+  - Orientation
+</Accordion>
+
+### Extraction Implementation
+
+Metadata extraction uses the `exifr` library with comprehensive parsing:
+
+```typescript lib/image/metadata.ts:8
+export async function extractMetadata(imageData: File | Blob | ArrayBuffer): Promise<ImageMetadata> {
+    try {
+        const exif = await exifr.parse(imageData, {
+            tiff: true,
+            exif: true,
+            gps: true,
+            icc: true,
+            iptc: true,
+            xmp: true,
+        });
+
+        if (!exif) {
+            return {};
+        }
+
+        const metadata: ImageMetadata = {};
+        
+        // Extract GPS coordinates
+        if (exif.latitude !== undefined && exif.longitude !== undefined) {
+            const gps: GpsCoordinates = {
+                latitude: exif.latitude,
+                longitude: exif.longitude,
+            };
+            if (exif.GPSAltitude) gps.altitude = exif.GPSAltitude;
+            metadata.gps = gps;
+        }
+        // ... extract other metadata
+    }
+}
+```
+
+### URL-Based Extraction
+
+Iris can fetch and analyze images from URLs with automatic retry logic:
+
+```typescript lib/image/metadata.ts:105
+export async function extractMetadataFromUrl(imageUrl: string): Promise<ImageMetadata> {
+    const maxRetries = 3;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            const response = await fetch(imageUrl, {
+                signal: controller.signal,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                },
+            });
+            clearTimeout(timeoutId);
+            
+            const buffer = await response.arrayBuffer();
+            return await extractMetadata(buffer);
+        } catch (error) {
+            // Retry with exponential backoff
+            if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+            }
+        }
+    }
+}
+```
+
+## Technical Details
+
+### Search URL Generation
+
+Each search engine requires a different URL format:
+
+```typescript lib/image/engines.ts:25
+export function buildSearchUrl(engine: ImageSearchEngine, imageUrl: string): string {
+    const encodedUrl = encodeURIComponent(imageUrl);
+
+    switch (engine) {
+        case 'google':
+            return `https://lens.google.com/uploadbyurl?url=${encodedUrl}`;
+        case 'yandex':
+            return `https://yandex.com/images/search?rpt=imageview&url=${encodedUrl}`;
+        case 'bing':
+            return `https://www.bing.com/images/searchbyimage?cbir=sbi&imgurl=${encodedUrl}`;
+    }
+}
+```
+
+### Supported Image Formats
+
+<Info>
+  **Supported Formats:**
+  - JPEG/JPG (most common, best EXIF support)
+  - PNG (limited EXIF support)
+  - GIF (basic properties only)
+  - WebP (modern format with EXIF support)
+  - HEIC/HEIF (Apple format)
+</Info>
+
+## Use Cases
+
+### Verification
+- Verify if a profile picture appears elsewhere online
+- Check if product images are stolen from other sites
+- Identify the original source of viral images
+
+### Investigation
+- Find additional context about a location from GPS data
+- Determine when a photo was actually taken
+- Identify camera equipment used
+
+### Security
+- Check if your photos are being used without permission
+- Identify edited or manipulated images
+- Discover metadata that shouldn't be public
+
+## Privacy & Security
+
+<Warning>
+  **Important Privacy Notes:**
+  
+  1. **GPS Data:** Many cameras and smartphones embed GPS coordinates in photos. This can reveal your home address or frequent locations.
+  
+  2. **Metadata Stripping:** Social media platforms usually remove EXIF data when you upload photos, but direct shares may preserve it.
+  
+  3. **Public Upload:** When using Iris, images must be publicly accessible via URL for reverse search engines to analyze them.
+</Warning>
+
+<Note>
+  **Removing Metadata:** Most image editing tools can strip EXIF data:
+  - macOS: Preview > Tools > Show Inspector > GPS tab > Remove Location Info
+  - Windows: Right-click > Properties > Details > Remove Properties and Personal Information
+  - Command line: `exiftool -all= image.jpg`
+</Note>
+
+## API Usage
+
+### Extract Metadata
+
+```typescript
+import { extractMetadata } from '@/lib/image';
+
+const file = await fetch('image.jpg').then(r => r.blob());
+const metadata = await extractMetadata(file);
+
+if (metadata.gps) {
+    console.log(`Location: ${metadata.gps.latitude}, ${metadata.gps.longitude}`);
+}
+
+if (metadata.camera) {
+    console.log(`Camera: ${metadata.camera.make} ${metadata.camera.model}`);
+}
+```
+
+### Build Search URLs
+
+```typescript
+import { buildSearchUrl, IMAGE_SEARCH_ENGINES } from '@/lib/image';
+
+const imageUrl = 'https://example.com/photo.jpg';
+
+for (const engine of IMAGE_SEARCH_ENGINES) {
+    const searchUrl = buildSearchUrl(engine.id, imageUrl);
+    console.log(`${engine.name}: ${searchUrl}`);
+}
+```
+
+## Limitations
+
+<Warning>
+  **Technical Limitations:**
+  
+  - **File Size:** Large images (>10MB) may fail to process
+  - **Timeout:** URL fetching times out after 30 seconds
+  - **Format Support:** Some proprietary formats may not be supported
+  - **Corrupted Files:** Damaged images may not yield complete metadata
+</Warning>

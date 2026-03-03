@@ -1,80 +1,363 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get Iris up and running in under 5 minutes with this step-by-step installation guide.
 ---
 
-## Get started in three steps
+# Quick Start Guide
 
-Get your documentation site running locally and make your first customization.
+This guide will help you install, configure, and run Iris on your local machine. Most features work out of the box without API keys.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+Before you begin, ensure you have the following installed:
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+- **Node.js 18 or higher** - [Download here](https://nodejs.org/)
+- **npm, yarn, or pnpm** - Comes with Node.js
+- **Git** - [Download here](https://git-scm.com/)
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  You can verify your Node.js version by running `node --version` in your terminal.
 </Note>
+
+## Installation
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the Iris repository from GitHub:
+    
+    ```bash
+    git clone https://github.com/moonlightontheriver/iris.git
+    cd iris
+    ```
+    
+    This downloads the complete source code to your local machine.
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install all required npm packages:
+    
+    <CodeGroup>
+    ```bash npm
+    npm install
+    ```
+    
+    ```bash yarn
+    yarn install
+    ```
+    
+    ```bash pnpm
+    pnpm install
+    ```
+    </CodeGroup>
+    
+    This will install all dependencies defined in `package.json`:
+    
+    ```json
+    // source: package.json:11-59
+    {
+      "dependencies": {
+        "@hookform/resolvers": "^5.2.2",
+        "@radix-ui/react-accordion": "^1.2.12",
+        "@radix-ui/react-dialog": "^1.1.15",
+        "framer-motion": "^12.23.26",
+        "next": "16.1.0",
+        "react": "19.2.3",
+        "react-dom": "19.2.3",
+        "tailwind-merge": "^3.4.0",
+        "zod": "^4.2.1"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Configure Environment Variables">
+    Create a `.env` file from the example template:
+    
+    ```bash
+    cp .env.example .env
+    ```
+    
+    The default configuration enables basic logging and sets sensible defaults:
+    
+    ```env
+    # source: .env.example:1-11
+    NEXT_PUBLIC_LOG_LEVEL=0 # 0 = disabled 1 = basic 2 = debug
+    NODE_ENV=development # development/production
+    
+    IMGBB_API_KEY= # imgbb used for temporary storing reverse image requests
+    MAX_IMAGE_SIZE=32000 # in kb default = 32mb which is the max accepted by imgbb unless you have premium.
+    IMAGE_EXPIRY=600 # in seconds, default 600 = 10 minutes
+    
+    IPQS_API_KEY= # ipqs used for email analysis
+    
+    COMPANIESHOUSE_API_KEY= # companies house api for uk company data
+    ```
+    
+    <Info>
+      You can start using Iris immediately without API keys! Features like domain analysis, username search, SEC EDGAR, and GLEIF lookups work with public APIs.
+    </Info>
+  </Step>
+
+  <Step title="Start the Development Server">
+    Launch Iris in development mode:
+    
+    ```bash
+    npm run dev
+    ```
+    
+    You should see output similar to:
+    
+    ```
+    ▲ Next.js 16.1.0
+    - Local:        http://localhost:3000
+    - Network:      http://192.168.1.100:3000
+    
+    ✓ Ready in 2.1s
+    ```
+    
+    Open your browser to http://localhost:3000
+  </Step>
+
+  <Step title="Verify Installation">
+    Test that Iris is working correctly:
+    
+    1. **Domain Analysis** (no API key required):
+       - Navigate to the Domain tab
+       - Enter a domain like `example.com`
+       - Click "Analyze"
+       - You should see DNS records, WHOIS data, and SSL information
+    
+    2. **Username Search** (no API key required):
+       - Navigate to the Username tab
+       - Enter a common username
+       - Select sources (WhatsMyName, Sherlock, Maigret)
+       - Watch results stream in real-time
+    
+    <Note>
+      If everything works, you're ready to start using Iris! For enhanced features, continue to the API key setup below.
+    </Note>
+  </Step>
+</Steps>
+
+## Optional: API Key Setup
+
+While many features work without API keys, you'll need them for advanced capabilities:
+
+### ImgBB (Image Uploads)
+
+Required for reverse image search functionality.
+
+<Steps>
+  <Step title="Create ImgBB Account">
+    1. Visit https://api.imgbb.com/
+    2. Click "Get API Key"
+    3. Sign up for a free account
+  </Step>
+  
+  <Step title="Get API Key">
+    1. Log in to your ImgBB dashboard
+    2. Copy your API key
+    3. Add to `.env`:
+    
+    ```env
+    IMGBB_API_KEY=your_imgbb_api_key_here
+    ```
+  </Step>
+</Steps>
+
+### IPQualityScore (Email Verification)
+
+Required for email reputation and breach checking.
+
+<Steps>
+  <Step title="Create IPQS Account">
+    1. Visit https://www.ipqualityscore.com/
+    2. Create a free account
+    3. Free tier includes 5,000 lookups/month
+  </Step>
+  
+  <Step title="Get API Key">
+    1. Navigate to your dashboard
+    2. Find your API key under "API Settings"
+    3. Add to `.env`:
+    
+    ```env
+    IPQS_API_KEY=your_ipqs_api_key_here
+    ```
+  </Step>
+</Steps>
+
+### Companies House (UK Company Data)
+
+Required for UK company lookups.
+
+<Steps>
+  <Step title="Create Developer Account">
+    1. Visit https://developer.company-information.service.gov.uk/
+    2. Create an account
+    3. Register a REST application
+  </Step>
+  
+  <Step title="Get API Key">
+    1. Log in to your developer account
+    2. Navigate to "Your applications"
+    3. Copy your API key
+    4. Add to `.env`:
+    
+    ```env
+    COMPANIESHOUSE_API_KEY=your_companies_house_api_key_here
+    ```
+  </Step>
+</Steps>
+
+## Production Build
+
+For production deployment, build an optimized version:
+
+<CodeGroup>
+```bash Build
+npm run build
+```
+
+```bash Start
+npm start
+```
+</CodeGroup>
+
+The build process:
+1. Compiles TypeScript to JavaScript
+2. Optimizes React components
+3. Minifies CSS and assets
+4. Generates static pages where possible
+
+<Warning>
+  Always set `NODE_ENV=production` in your `.env` file for production deployments.
+</Warning>
+
+## Common Issues
+
+### Port 3000 Already in Use
+
+If port 3000 is occupied, specify a different port:
+
+```bash
+PORT=3001 npm run dev
+```
+
+### API Key Not Working
+
+Ensure your `.env` file:
+- Is in the project root directory
+- Has no spaces around `=` signs
+- Contains valid API keys (no quotes needed)
+- Is not tracked by git (included in `.gitignore`)
+
+### Module Not Found Errors
+
+Delete `node_modules` and reinstall:
+
+```bash
+rm -rf node_modules package-lock.json
+npm install
+```
+
+### Build Errors
+
+Clear Next.js cache and rebuild:
+
+```bash
+rm -rf .next
+npm run build
+```
+
+## Understanding the API Structure
+
+Iris uses Next.js App Router with API routes in `app/api/`. Here's how a typical endpoint works:
+
+```typescript
+// source: app/api/email/verify/route.ts:7-28
+export async function POST(request: NextRequest) {
+    try {
+        const body = await request.json();
+        const { email } = body;
+
+        if (!email || typeof email !== 'string') {
+            return new Response(
+                JSON.stringify({ success: false, error: 'Invalid email address' }),
+                { status: 400, headers: { 'Content-Type': 'application/json' } }
+            );
+        }
+
+        // Basic email format validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return new Response(
+                JSON.stringify({ success: false, error: 'Invalid email format' }),
+                { status: 400, headers: { 'Content-Type': 'application/json' } }
+            );
+        }
+
+        const result = await verifyEmail(email.trim().toLowerCase());
+        // ...
+    }
+}
+```
+
+Each API endpoint:
+1. Validates input parameters
+2. Sanitizes and normalizes data
+3. Calls service layer functions
+4. Returns JSON or server-sent events (SSE) streams
+
+## Development Workflow
+
+<Steps>
+  <Step title="Make Changes">
+    Edit files in `app/`, `components/`, or `lib/`
+  </Step>
+  
+  <Step title="Hot Reload">
+    Next.js automatically reloads on file changes
+  </Step>
+  
+  <Step title="Check Console">
+    Monitor browser console and terminal for errors
+  </Step>
+  
+  <Step title="Test Features">
+    Manually test affected functionality
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Configuration Guide"
+    icon="gear"
+    href="/configuration"
+  >
+    Detailed environment variable documentation
+  </Card>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api/overview"
+  >
+    Complete API endpoint documentation
+  </Card>
+  <Card
+    title="Username Search"
+    icon="user"
+    href="/features/username-search"
+  >
+    Search for usernames across platforms
+  </Card>
+  <Card
+    title="Self-Hosting Guide"
+    icon="server"
+    href="/guides/self-hosting"
+  >
+    Deploy Iris to production environments
+  </Card>
+</CardGroup>

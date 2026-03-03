@@ -1,0 +1,246 @@
+---
+title: Introduction to Iris
+description: A simple, powerful OSINT tool that combines multiple free APIs into one unified interface for username search, image analysis, email verification, domain lookup, and company research.
+---
+
+# Welcome to Iris
+
+Iris is an open-source intelligence (OSINT) tool that simplifies reconnaissance by aggregating multiple free APIs into a single, intuitive interface. No fancy features, no bloat—just straightforward data gathering for security researchers, investigators, and curious minds.
+
+<CardGroup cols={2}>
+  <Card
+    title="Username Search"
+    icon="user"
+    href="/features/username-search"
+  >
+    Check if a username exists across 500+ platforms using WhatsMyName, Sherlock, and Maigret databases.
+  </Card>
+  <Card
+    title="Image Analysis"
+    icon="image"
+    href="/features/image-search"
+  >
+    Reverse image search across Google Lens, Yandex, and Bing with automatic metadata extraction.
+  </Card>
+  <Card
+    title="Email Verification"
+    icon="envelope"
+    href="/features/email-lookup"
+  >
+    Check email reputation, breach history, and validity using IPQualityScore API.
+  </Card>
+  <Card
+    title="Domain Analysis"
+    icon="globe"
+    href="/features/domain-analysis"
+  >
+    DNS records, WHOIS, SSL certificates, security headers, and technology detection.
+  </Card>
+  <Card
+    title="Company Search"
+    icon="building"
+    href="/features/company-search"
+  >
+    Lookup companies in UK Companies House, SEC EDGAR (US), and GLEIF global LEI database.
+  </Card>
+  <Card
+    title="Privacy First"
+    icon="shield-halved"
+    href="/guides/privacy"
+  >
+    No accounts, no tracking, no analytics. Self-host for complete control over your data.
+  </Card>
+</CardGroup>
+
+## Why Iris?
+
+OSINT investigations often require jumping between dozens of websites and services. Iris eliminates that friction by:
+
+- **Aggregating Data Sources** - Access multiple APIs through a single interface
+- **Real-Time Streaming** - See results as they arrive with server-sent events
+- **No Authentication** - Run locally without creating accounts on third-party services
+- **Privacy Focused** - No tracking, no analytics, no data retention
+- **Self-Hostable** - Full control over your infrastructure and data
+
+## How It Works
+
+Iris is built on Next.js 15 with React 19 and TypeScript. Each feature module runs independently:
+
+```typescript
+// Example: Username search API endpoint
+// source: app/api/username/search/route.ts:8-32
+export async function POST(request: NextRequest) {
+    const body = await request.json();
+    const { username, sources } = body;
+
+    if (!username || typeof username !== 'string' || username.length < 1) {
+        return new Response(
+            JSON.stringify({ error: 'Invalid username' }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
+    }
+
+    const validSourceIds = OSINT_SOURCES.map(s => s.id);
+    const requestedSources: OsintSource[] = Array.isArray(sources)
+        ? sources.filter((s: string) => validSourceIds.includes(s as OsintSource)) as OsintSource[]
+        : validSourceIds;
+
+    if (requestedSources.length === 0) {
+        return new Response(
+            JSON.stringify({ error: 'No valid sources selected' }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
+    }
+
+    const cleanUsername = username.trim().toLowerCase();
+    // ... streaming implementation
+}
+```
+
+<Info>
+  All API endpoints use streaming responses for real-time progress updates, allowing you to see results as they're discovered rather than waiting for batch completion.
+</Info>
+
+## Core Features
+
+### Username Enumeration
+
+Search across 500+ platforms using three major OSINT databases:
+- **WhatsMyName** - Community-maintained username enumeration
+- **Sherlock** - Social media hunting across popular platforms  
+- **Maigret** - Comprehensive username search engine
+
+### Image Intelligence
+
+Upload images for reverse search and metadata extraction:
+- Automatic EXIF data parsing (GPS, camera info, timestamps)
+- Simultaneous queries to Google Lens, Yandex, and Bing
+- Temporary image hosting via ImgBB (auto-deletes after 10 minutes)
+
+### Email Analysis
+
+Verify email addresses and check reputation:
+- Format validation and syntax checking
+- Disposable email detection
+- Known breach database lookups
+- Spam/fraud risk scoring
+
+### Domain Reconnaissance
+
+Comprehensive domain analysis without API keys:
+- DNS resolution (A, AAAA, MX, TXT, NS, CNAME, SOA records)
+- WHOIS lookup with registrar information
+- SSL certificate validation and expiration
+- Security header analysis (CSP, HSTS, X-Frame-Options)
+- Technology stack detection
+- Optional subdomain enumeration
+
+### Company Research
+
+Search company databases across multiple jurisdictions:
+- **UK Companies House** - Official UK company registry
+- **SEC EDGAR** - US Securities and Exchange Commission filings
+- **GLEIF** - Global Legal Entity Identifier database
+
+## Tech Stack
+
+<CardGroup cols={3}>
+  <Card title="Next.js 15" icon="react">
+    App Router with server-sent events
+  </Card>
+  <Card title="React 19" icon="atom">
+    Modern UI with streaming responses
+  </Card>
+  <Card title="TypeScript" icon="code">
+    Type-safe API contracts
+  </Card>
+  <Card title="Tailwind CSS" icon="palette">
+    Utility-first styling
+  </Card>
+  <Card title="Framer Motion" icon="wand-magic-sparkles">
+    Smooth animations
+  </Card>
+  <Card title="Radix UI" icon="cube">
+    Accessible components
+  </Card>
+</CardGroup>
+
+## What Iris Doesn't Do
+
+<Warning>
+  Iris is a data aggregation tool, not a hacking framework. It only queries public APIs and services. It does not:
+  - Exploit vulnerabilities or bypass authentication
+  - Store or log search queries
+  - Track user behavior or analytics
+  - Require user accounts or authentication
+</Warning>
+
+## Quick Start
+
+Get Iris running in under 5 minutes:
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/moonlightontheriver/iris.git
+    cd iris
+    ```
+  </Step>
+  
+  <Step title="Install dependencies">
+    ```bash
+    npm install
+    ```
+  </Step>
+  
+  <Step title="Configure environment">
+    ```bash
+    cp .env.example .env
+    # Edit .env with your API keys (optional)
+    ```
+  </Step>
+  
+  <Step title="Start the server">
+    ```bash
+    npm run dev
+    ```
+    Open http://localhost:3000
+  </Step>
+</Steps>
+
+<Note>
+  Many features work without API keys! Domain analysis, SEC EDGAR, GLEIF LEI lookup, and username search all use public APIs.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start Guide"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Get Iris installed and running in minutes
+  </Card>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/configuration"
+  >
+    Configure API keys and environment variables
+  </Card>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api/overview"
+  >
+    Explore the REST API endpoints
+  </Card>
+  <Card
+    title="Self-Hosting"
+    icon="server"
+    href="/guides/self-hosting"
+  >
+    Deploy Iris on your own infrastructure
+  </Card>
+</CardGroup>

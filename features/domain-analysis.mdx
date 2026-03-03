@@ -1,0 +1,492 @@
+---
+title: "Domain Analysis"
+description: "Comprehensive domain intelligence including DNS records, WHOIS data, SSL certificates, security headers, and technology detection"
+---
+
+The Domain Analysis feature provides in-depth intelligence about any domain, including infrastructure details, security posture, ownership information, and technology stack.
+
+## How It Works
+
+Domain analysis performs multiple parallel checks to gather comprehensive information:
+
+<Steps>
+  <Step title="Enter Domain">
+    Input the domain name (e.g., `example.com` or `subdomain.example.com`). No need for `http://` or `www.`
+  </Step>
+  
+  <Step title="DNS Resolution">
+    Iris queries multiple DNS record types:
+    - A records (IPv4 addresses)
+    - AAAA records (IPv6 addresses)
+    - MX records (mail servers)
+    - TXT records (SPF, DMARC, verification)
+    - NS records (nameservers)
+    - CNAME records (aliases)
+    - SOA records (zone authority)
+  </Step>
+  
+  <Step title="Infrastructure Analysis">
+    Parallel analysis of:
+    - WHOIS registration data
+    - SSL/TLS certificates
+    - HTTP security headers
+    - Technology detection (CMS, frameworks, servers)
+    - Subdomain enumeration
+  </Step>
+  
+  <Step title="Security Assessment">
+    Evaluate security posture:
+    - Certificate validity
+    - Security header implementation
+    - Known vulnerabilities
+    - Reputation and blacklist status
+  </Step>
+</Steps>
+
+## DNS Analysis
+
+### Record Types
+
+Iris resolves all standard DNS record types using Google (8.8.8.8, 8.8.4.4) and Cloudflare (1.1.1.1) DNS servers:
+
+```typescript lib/domain/dns.ts:5
+const resolver = new Resolver();
+resolver.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
+```
+
+<Tabs>
+  <Tab title="A & AAAA Records">
+    **IP Address Resolution**
+    
+    ```typescript lib/domain/dns.ts:31
+    // Resolve IPv4 addresses
+    const aRecords = await resolver.resolve4(domain);
+    results.a = aRecords.map(ip => ({ type: 'A', value: ip }));
+    
+    // Resolve IPv6 addresses
+    const aaaaRecords = await resolver.resolve6(domain);
+    results.aaaa = aaaaRecords.map(ip => ({ type: 'AAAA', value: ip }));
+    ```
+    
+    Shows all IP addresses the domain resolves to. Multiple IPs often indicate load balancing or CDN usage.
+  </Tab>
+  
+  <Tab title="MX Records">
+    **Mail Server Configuration**
+    
+    ```typescript lib/domain/dns.ts:48
+    const mxRecords = await resolver.resolveMx(domain);
+    results.mx = mxRecords.map(mx => ({
+        type: 'MX',
+        value: mx.exchange,
+        priority: mx.priority,  // Lower number = higher priority
+    }));
+    ```
+    
+    Reveals which mail servers handle email for this domain. Priority determines which server receives mail first.
+    
+    <Info>
+      **Common Providers:**
+      - Google Workspace: `aspmx.l.google.com`
+      - Microsoft 365: `*.mail.protection.outlook.com`
+      - Proton Mail: `mail.protonmail.ch`
+    </Info>
+  </Tab>
+  
+  <Tab title="TXT Records">
+    **Text-Based Configuration**
+    
+    ```typescript lib/domain/dns.ts:59
+    const txtRecords = await resolver.resolveTxt(domain);
+    results.txt = txtRecords.map(txt => ({
+        type: 'TXT',
+        value: txt.join(''),
+    }));
+    ```
+    
+    TXT records contain various configuration data:
+    - **SPF:** Email sender verification (`v=spf1 ...`)
+    - **DMARC:** Email authentication policy (`v=DMARC1; ...`)
+    - **Domain Verification:** Prove ownership to services
+    - **Site Verification:** Google, Microsoft, etc.
+  </Tab>
+  
+  <Tab title="NS Records">
+    **Nameserver Authority**
+    
+    ```typescript lib/domain/dns.ts:71
+    const nsRecords = await resolver.resolveNs(domain);
+    results.ns = nsRecords.map(ns => ({ type: 'NS', value: ns }));
+    ```
+    
+    Shows which nameservers are authoritative for this domain.
+    
+    **Common Nameservers:**
+    - Cloudflare: `*.ns.cloudflare.com`
+    - AWS Route 53: `ns-*.awsdns-*.com`
+    - Google Cloud DNS: `ns-cloud-*.googledomains.com`
+  </Tab>
+</Tabs>
+
+### Domain Existence Check
+
+```typescript lib/domain/dns.ts:103
+export async function domainExists(domain: string): Promise<boolean> {
+    try {
+        await resolver.resolve4(domain);
+        return true;
+    } catch {
+        try {
+            await resolver.resolveNs(domain);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+}
+```
+
+Verifies if a domain exists by attempting to resolve A records or nameservers.
+
+## WHOIS Data
+
+<Info>
+  WHOIS provides registration and ownership information for domains.
+</Info>
+
+### Retrieved Information
+
+```typescript lib/domain/types.ts:12
+export interface WhoisData {
+    domainName: string;
+    registrar?: string;           // e.g., "GoDaddy.com, LLC"
+    registrarUrl?: string;
+    creationDate?: string;        // When domain was registered
+    expirationDate?: string;      // When domain expires
+    updatedDate?: string;         // Last update
+    status?: string[];            // e.g., "clientTransferProhibited"
+    nameServers?: string[];
+    dnssec?: string;              // DNSSEC status
+    registrantOrg?: string;       // Owner organization
+    registrantCountry?: string;
+    registrantState?: string;
+    raw?: string;                 // Raw WHOIS response
+}
+```
+
+<Accordion title="Domain Status Codes">
+  Common ICANN domain status codes:
+  
+  - **clientTransferProhibited:** Cannot be transferred without authorization
+  - **clientUpdateProhibited:** Cannot be updated without authorization
+  - **clientDeleteProhibited:** Cannot be deleted without authorization
+  - **clientHold:** Domain suspended, not resolving
+  - **pendingDelete:** Domain scheduled for deletion
+  - **redemptionPeriod:** Expired, can be renewed with penalty
+</Accordion>
+
+<Note>
+  Many domains use WHOIS privacy services that mask registrant information. This is normal and doesn't indicate anything suspicious.
+</Note>
+
+## SSL/TLS Certificates
+
+### Certificate Information
+
+```typescript lib/domain/types.ts:28
+export interface SslCertificate {
+    issuer: string;              // Certificate Authority
+    subject: string;             // Domain(s) covered
+    validFrom: string;           // Start date
+    validTo: string;             // Expiration date
+    daysUntilExpiry: number;     // Days remaining
+    isExpired: boolean;
+    isValid: boolean;            // Trusted CA & not expired
+    serialNumber?: string;
+    fingerprint?: string;        // SHA-256 fingerprint
+    altNames?: string[];         // Subject Alternative Names
+}
+```
+
+<Warning>
+  **Certificate Warnings:**
+  
+  - **Expired:** Certificate past its expiration date
+  - **Self-Signed:** Not issued by a trusted Certificate Authority
+  - **Hostname Mismatch:** Certificate doesn't cover the requested domain
+  - **Untrusted CA:** Issued by an unrecognized authority
+</Warning>
+
+<Info>
+  **Common Certificate Authorities:**
+  - Let's Encrypt (free, automated)
+  - DigiCert
+  - Sectigo (formerly Comodo)
+  - GlobalSign
+  - GoDaddy
+</Info>
+
+## Security Headers
+
+### Header Analysis
+
+```typescript lib/domain/types.ts:49
+export interface SecurityHeaders {
+    hasHsts: boolean;                    // HTTP Strict Transport Security
+    hasXFrameOptions: boolean;           // Clickjacking protection
+    hasXContentTypeOptions: boolean;     // MIME-sniffing protection
+    hasContentSecurityPolicy: boolean;   // XSS and injection protection
+    hasXXssProtection: boolean;          // Legacy XSS filter
+    hasReferrerPolicy: boolean;          // Referrer information control
+    hasPermissionsPolicy: boolean;       // Feature policy
+    score: number;                       // 0-100 security score
+    details: Record<string, string | null>;
+}
+```
+
+<Tabs>
+  <Tab title="HSTS">
+    **HTTP Strict Transport Security**
+    
+    Forces browsers to only use HTTPS connections.
+    
+    ```http
+    Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+    ```
+    
+    - `max-age`: How long to enforce HTTPS (seconds)
+    - `includeSubDomains`: Apply to all subdomains
+    - `preload`: Include in browser HSTS preload lists
+  </Tab>
+  
+  <Tab title="CSP">
+    **Content Security Policy**
+    
+    Prevents XSS and code injection attacks by controlling resource loading.
+    
+    ```http
+    Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'
+    ```
+    
+    <Info>
+      A strong CSP significantly reduces XSS attack surface by restricting:
+      - Script sources
+      - Style sources
+      - Image sources
+      - Frame sources
+      - Connection endpoints
+    </Info>
+  </Tab>
+  
+  <Tab title="X-Frame-Options">
+    **Clickjacking Protection**
+    
+    Prevents the page from being embedded in frames/iframes.
+    
+    ```http
+    X-Frame-Options: DENY
+    X-Frame-Options: SAMEORIGIN
+    ```
+    
+    - `DENY`: Cannot be framed at all
+    - `SAMEORIGIN`: Only by same origin
+    - `ALLOW-FROM`: Deprecated, use CSP instead
+  </Tab>
+  
+  <Tab title="Other Headers">
+    **Additional Security Headers**
+    
+    ```http
+    X-Content-Type-Options: nosniff
+    Referrer-Policy: strict-origin-when-cross-origin
+    Permissions-Policy: geolocation=(), microphone=(), camera=()
+    ```
+    
+    - **X-Content-Type-Options:** Prevents MIME-sniffing attacks
+    - **Referrer-Policy:** Controls referrer information leakage
+    - **Permissions-Policy:** Restricts browser feature access
+  </Tab>
+</Tabs>
+
+### Security Score
+
+The security score (0-100) is calculated based on:
+1. Presence of critical headers (HSTS, CSP)
+2. Configuration strength of each header
+3. Absence of deprecated headers
+4. Overall security posture
+
+<Note>
+  **Grade Scale:**
+  - 90-100: Excellent (A+)
+  - 80-89: Good (A)
+  - 70-79: Adequate (B)
+  - 60-69: Poor (C)
+  - Below 60: Failing (F)
+</Note>
+
+## Technology Detection
+
+### Identified Technologies
+
+```typescript lib/domain/types.ts:41
+export interface TechnologyDetection {
+    name: string;          // Technology name
+    category: string;      // Category (CMS, Analytics, etc.)
+    confidence: number;    // 0-100 confidence score
+    version?: string;      // Version if detected
+    icon?: string;         // Icon URL
+}
+```
+
+**Detection Categories:**
+- **CMS:** WordPress, Drupal, Joomla
+- **Web Servers:** nginx, Apache, IIS
+- **Programming Languages:** PHP, Node.js, Python
+- **Frameworks:** React, Vue.js, Laravel, Django
+- **Analytics:** Google Analytics, Plausible
+- **CDN:** Cloudflare, Fastly, Akamai
+- **JavaScript Libraries:** jQuery, Bootstrap
+- **Payment:** Stripe, PayPal
+- **Marketing:** HubSpot, Mailchimp
+
+<Warning>
+  Technology detection is based on HTTP headers, HTML content, and script patterns. Some technologies may be hidden or misidentified.
+</Warning>
+
+## Subdomain Enumeration
+
+### Discovery Methods
+
+```typescript lib/domain/types.ts:67
+export interface Subdomain {
+    name: string;     // Full subdomain
+    ip?: string;      // Resolved IP
+    source: string;   // Discovery method
+}
+```
+
+Subdomains can be discovered through:
+- **Certificate Transparency Logs:** SSL/TLS certificates list SANs
+- **DNS Enumeration:** Common subdomain brute-forcing
+- **Search Engine Indexing:** Google, Bing searches
+- **Public Datasets:** Rapid7, SecurityTrails
+
+<Info>
+  **Common Subdomains:**
+  - `www` - Main website
+  - `mail` - Webmail interface
+  - `ftp` - File transfer
+  - `admin` - Administrative panel
+  - `api` - API endpoints
+  - `dev/staging` - Development environments
+</Info>
+
+## Reputation & Blacklists
+
+### Reputation Check
+
+```typescript lib/domain/types.ts:118
+reputation?: {
+    isMalicious: boolean;
+    isPhishing: boolean;
+    isSpam: boolean;
+    riskScore: number;        // 0-100
+    sources: string[];        // Detection sources
+}
+```
+
+**Checked Against:**
+- Google Safe Browsing
+- PhishTank
+- SURBL (Spam URI Realtime Blocklists)
+- OpenPhish
+- URLhaus (malware distribution)
+
+<Warning>
+  A domain flagged as malicious should be approached with extreme caution. It may host:
+  - Phishing pages
+  - Malware distribution
+  - Command & control servers
+  - Cryptocurrency scams
+</Warning>
+
+## Use Cases
+
+### Security Research
+- Analyze infrastructure of suspicious domains
+- Identify hosting providers and IP ranges
+- Detect phishing sites mimicking legitimate domains
+- Find related subdomains and infrastructure
+
+### Due Diligence
+- Verify business domains before partnerships
+- Check domain age and registration history
+- Assess security posture before integration
+- Identify technology stack for compatibility
+
+### Infrastructure Planning
+- Research competitor technology stacks
+- Benchmark security header implementation
+- Study DNS configuration best practices
+- Analyze CDN and hosting choices
+
+### Investigation
+- Track domain ownership changes
+- Discover hidden subdomains
+- Identify associated infrastructure
+- Find expired SSL certificates
+
+## API Usage Example
+
+```typescript
+import { 
+    resolveDns, 
+    fetchWhois, 
+    fetchSslCertificate,
+    analyzeSecurityHeaders,
+    detectTechnologies,
+    findSubdomains
+} from '@/lib/domain';
+
+const domain = 'example.com';
+
+// Run all checks in parallel
+const [dns, whois, ssl, security, tech, subdomains] = await Promise.all([
+    resolveDns(domain),
+    fetchWhois(domain),
+    fetchSslCertificate(domain),
+    analyzeSecurityHeaders(domain),
+    detectTechnologies(domain),
+    findSubdomains(domain),
+]);
+
+console.log('DNS A Records:', dns.a);
+console.log('Domain Created:', whois.creationDate);
+console.log('SSL Valid Until:', ssl.validTo);
+console.log('Security Score:', security.score);
+console.log('Technologies:', tech.map(t => t.name));
+console.log('Subdomains:', subdomains.length);
+```
+
+## Limitations
+
+<Warning>
+  **Known Limitations:**
+  
+  - **Rate Limiting:** Some checks may be rate-limited by external services
+  - **WHOIS Privacy:** Registration details often hidden by privacy services
+  - **Subdomain Coverage:** Only discovers publicly known subdomains
+  - **Technology Detection:** May miss technologies without fingerprints
+  - **Geographic Restrictions:** Some data may vary by location
+</Warning>
+
+<Note>
+  **Performance:**
+  
+  Full domain analysis typically takes 5-15 seconds depending on:
+  - Number of DNS records
+  - WHOIS server response time
+  - Subdomain enumeration depth
+  - Network latency
+</Note>

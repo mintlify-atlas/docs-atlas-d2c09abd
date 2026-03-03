@@ -1,0 +1,315 @@
+---
+title: Privacy & Security
+description: Understanding how Iris handles your data and protects your privacy
+---
+
+Iris is designed with privacy as a core principle. This guide explains how your data is handled, what information is collected, and how to maximize your privacy when using the tool.
+
+## The Short Version
+
+<Info>
+**Privacy First Approach**
+- No user accounts or authentication required
+- No tracking, analytics, or cookies
+- Search queries are not stored
+- Direct API communication with third parties
+- Open source and fully auditable
+</Info>
+
+## What We Don't Collect
+
+Iris is built to respect your privacy. Here's what we **don't** do:
+
+<CardGroup cols={2}>
+  <Card title="No Accounts" icon="user-slash">
+    No registration, login, or user authentication system
+  </Card>
+  <Card title="No Tracking" icon="eye-slash">
+    No analytics, cookies, or behavioral tracking
+  </Card>
+  <Card title="No Storage" icon="database">
+    Search queries and results are not stored on our servers
+  </Card>
+  <Card title="No Data Sales" icon="ban">
+    We don't collect data, so there's nothing to sell or share
+  </Card>
+</CardGroup>
+
+## How Iris Handles Your Data
+
+### Image Uploads
+
+When you upload an image for reverse image search:
+
+<Steps>
+  <Step title="Temporary Upload">
+    Your image is uploaded to ImgBB, a third-party image hosting service. This is necessary to perform reverse image searches across Google Lens, Yandex, and Bing.
+  </Step>
+
+  <Step title="Auto-Deletion">
+    Images are configured to automatically delete after **10 minutes** (600 seconds). This is set via the `IMAGE_EXPIRY` environment variable.
+
+    ```env
+    IMAGE_EXPIRY=600  # Auto-delete after 10 minutes
+    ```
+  </Step>
+
+  <Step title="No Local Storage">
+    Iris does not keep any copy of your uploaded images on its servers. Once the temporary ImgBB URL is generated, the image only exists on ImgBB's infrastructure.
+  </Step>
+</Steps>
+
+<Warning>
+**Important Considerations**
+
+While Iris sets images to expire after 10 minutes, ImgBB controls the actual deletion process. For maximum privacy:
+- Use image URLs instead of file uploads when possible
+- Self-host Iris with your own image hosting solution
+- Avoid uploading sensitive or private images
+</Warning>
+
+### Search Queries
+
+All search queries (username, email, domain, company) are sent directly to third-party APIs:
+
+<CardGroup cols={2}>
+  <Card title="Username Search" icon="user">
+    Queries sent to WhatsMyName, Sherlock, and Maigret APIs
+  </Card>
+  <Card title="Email Lookup" icon="envelope">
+    Requests sent to IPQualityScore API
+  </Card>
+  <Card title="Domain Analysis" icon="globe">
+    Uses public DNS, WHOIS, and SSL certificate data
+  </Card>
+  <Card title="Company Search" icon="building">
+    Queries UK Companies House, GLEIF, and SEC EDGAR
+  </Card>
+</CardGroup>
+
+<Note>
+Iris acts as a proxy to these services. Your queries pass through the Iris server to reach the APIs, but they are not logged or stored.
+</Note>
+
+## Third-Party Services
+
+When you use Iris, your data interacts with various third-party services. Each has its own privacy policy:
+
+| Service | Purpose | Privacy Policy |
+|---------|---------|----------------|
+| **ImgBB** | Temporary image hosting | [imgbb.com/privacy](https://imgbb.com/privacy) |
+| **IPQualityScore** | Email verification and fraud detection | [ipqualityscore.com/privacy-policy](https://www.ipqualityscore.com/privacy-policy) |
+| **WhatsMyName** | Username enumeration | Public API, no account required |
+| **Sherlock** | Social media profile discovery | Open source project |
+| **Maigret** | Username OSINT | Open source project |
+| **Companies House** | UK company data | [companieshouse.gov.uk/privacy](https://www.gov.uk/government/organisations/companies-house/about/personal-information-charter) |
+| **GLEIF** | Legal Entity Identifier database | [gleif.org/privacy](https://www.gleif.org/en/meta/privacy-policy) |
+| **SEC EDGAR** | US company filings | [sec.gov/privacy](https://www.sec.gov/privacy) |
+| **Google Lens** | Reverse image search | [google.com/privacy](https://policies.google.com/privacy) |
+| **Yandex** | Reverse image search | [yandex.com/legal/privacy](https://yandex.com/legal/privacy/) |
+| **Bing** | Reverse image search | [microsoft.com/privacy](https://privacy.microsoft.com/privacystatement) |
+
+<Warning>
+**Important Notice**
+
+Iris has no control over how third-party services handle your queries. We recommend reviewing their privacy policies if you have specific concerns about data handling.
+</Warning>
+
+## Server Logs
+
+### Hosted Instances
+
+If you use a hosted version of Iris (e.g., on Vercel), standard server logs may be maintained:
+
+- **IP addresses** - Required for basic server operation
+- **Request timestamps** - For performance monitoring
+- **HTTP request headers** - Standard web server logging
+- **Error logs** - For debugging and stability
+
+<Info>
+Hosting providers like Vercel have their own data retention policies. Check your provider's privacy policy for details.
+</Info>
+
+### Self-Hosted Instances
+
+When you self-host Iris, you have complete control:
+
+- Configure logging levels via `NEXT_PUBLIC_LOG_LEVEL`
+- Control server log retention
+- Implement your own privacy policies
+- No data shared with third-party hosting providers
+
+## Maximizing Your Privacy
+
+<Steps>
+  <Step title="Self-Host Iris">
+    The most private way to use Iris is to run it on your own infrastructure:
+
+    ```bash
+    git clone https://github.com/moonlightontheriver/iris.git
+    cd iris
+    npm install
+    npm run build
+    npm start
+    ```
+
+    See the [Self-Hosting Guide](/guides/self-hosting) for detailed instructions.
+  </Step>
+
+  <Step title="Use Your Own API Keys">
+    Configure your own API keys to ensure queries are associated with your accounts:
+
+    ```env
+    IMGBB_API_KEY=your_key
+    IPQS_API_KEY=your_key
+    COMPANIESHOUSE_API_KEY=your_key
+    ```
+
+    See the [API Keys Guide](/guides/api-keys) for setup instructions.
+  </Step>
+
+  <Step title="Disable Logging">
+    Set logging to minimal or disabled in production:
+
+    ```env
+    NEXT_PUBLIC_LOG_LEVEL=0  # Disable all logging
+    ```
+  </Step>
+
+  <Step title="Use VPN or Tor">
+    Route your traffic through a VPN or Tor for additional anonymity when making OSINT queries.
+  </Step>
+
+  <Step title="Prefer URLs Over Uploads">
+    For image searches, use image URLs instead of uploading files when possible to avoid temporary storage on ImgBB.
+  </Step>
+</Steps>
+
+## Data Retention
+
+### Iris Application
+
+<CardGroup cols={2}>
+  <Card title="Search Queries" icon="magnifying-glass">
+    **Not stored** - Queries are processed in real-time and not saved
+  </Card>
+  <Card title="Search Results" icon="list">
+    **Not stored** - Results are displayed directly from APIs
+  </Card>
+  <Card title="Uploaded Images" icon="image">
+    **10 minutes** - Auto-deleted from ImgBB after expiry
+  </Card>
+  <Card title="User Sessions" icon="clock">
+    **No sessions** - No authentication or session management
+  </Card>
+</CardGroup>
+
+### Third-Party Services
+
+Data retention by third parties varies:
+
+- **ImgBB**: Images deleted after configured expiry time (default 10 minutes)
+- **IPQualityScore**: May log API requests per their privacy policy
+- **Other APIs**: Each service has different retention policies
+
+<Note>
+When self-hosting, you can implement your own image hosting solution to completely control image data retention.
+</Note>
+
+## Security Features
+
+### Application Security
+
+- **No authentication system** - Reduces attack surface
+- **Minimal data storage** - Less data to protect
+- **Open source code** - Fully auditable on GitHub
+- **Regular updates** - Security patches and dependency updates
+
+### API Key Protection
+
+<Warning>
+**Best Practices for API Keys**
+
+1. Never commit `.env` files to version control
+2. Use different keys for development and production
+3. Rotate keys periodically
+4. Monitor API usage for anomalies
+5. Revoke keys immediately if compromised
+</Warning>
+
+### HTTPS Encryption
+
+When deploying Iris:
+
+- Use HTTPS to encrypt data in transit
+- Configure SSL/TLS certificates
+- Enable HSTS (HTTP Strict Transport Security)
+- Use modern TLS protocols (1.2+)
+
+## Privacy by Design
+
+Iris follows privacy-by-design principles:
+
+1. **Data Minimization** - Only collect what's absolutely necessary
+2. **Purpose Limitation** - Data used only for intended OSINT purposes
+3. **Transparency** - Open source code allows full inspection
+4. **User Control** - Self-hosting option gives complete control
+5. **Security** - Minimal attack surface and regular updates
+
+## Compliance
+
+### GDPR Considerations
+
+For EU users:
+
+- No personal data is collected by Iris itself
+- Third-party APIs may be subject to GDPR
+- Self-hosting provides maximum control for compliance
+- No cookies or tracking means no consent banners needed
+
+### Data Subject Rights
+
+Since Iris doesn't store user data:
+
+- **Right to Access** - No user data stored to access
+- **Right to Erasure** - No data to delete
+- **Right to Portability** - No user data collected
+- **Right to Object** - No automated decision making
+
+## Changes to Privacy Policy
+
+As Iris is open source, any changes to data handling will be:
+
+1. Visible in the GitHub repository
+2. Documented in release notes
+3. Updated in this documentation
+4. Available for community review
+
+<Info>
+The source code is the ultimate source of truth. You can always review exactly how Iris handles data by inspecting the codebase.
+</Info>
+
+## Questions & Support
+
+<CardGroup cols={2}>
+  <Card title="View Source Code" icon="github" href="https://github.com/moonlightontheriver/iris">
+    Inspect how Iris handles your data
+  </Card>
+  <Card title="Report Issues" icon="bug" href="https://github.com/moonlightontheriver/iris/issues">
+    Report privacy concerns or bugs
+  </Card>
+  <Card title="Self-Hosting Guide" icon="server" href="/guides/self-hosting">
+    Deploy for maximum privacy control
+  </Card>
+  <Card title="API Configuration" icon="key" href="/guides/api-keys">
+    Set up your own API keys
+  </Card>
+</CardGroup>
+
+---
+
+<Note>
+**Last Updated:** January 2026
+
+This privacy documentation reflects the current state of the Iris OSINT tool. For the most up-to-date information, always refer to the source code and latest documentation.
+</Note>

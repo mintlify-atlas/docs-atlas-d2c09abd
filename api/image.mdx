@@ -1,0 +1,483 @@
+---
+title: Image Analysis API
+description: Upload images and extract EXIF metadata including GPS coordinates, camera info, and exposure settings
+---
+
+## Overview
+
+The Image Analysis API provides two endpoints for working with images:
+
+1. **Upload**: Upload images to a temporary CDN (ImgBB)
+2. **Analyze**: Extract EXIF metadata from uploaded images
+
+<Warning>
+Images are uploaded to ImgBB with a configurable expiration time (default: 10 minutes). Ensure you analyze images before they expire.
+</Warning>
+
+## Upload Image
+
+Upload an image file to temporary storage and receive a URL for analysis.
+
+### Endpoint
+
+```
+POST /api/image/upload
+```
+
+### Request
+
+#### Headers
+
+```
+Content-Type: multipart/form-data
+```
+
+#### Body Parameters
+
+<ParamField path="image" type="File" required>
+  Image file to upload. Supports common formats: JPEG, PNG, GIF, BMP, TIFF.
+  
+  **Max size**: 32MB (configurable via `MAX_IMAGE_SIZE` env variable)
+  
+  **Example**: File from input field or blob
+</ParamField>
+
+### Request Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:3000/api/image/upload \
+  -F "image=@/path/to/photo.jpg"
+```
+
+```javascript JavaScript
+const formData = new FormData();
+const fileInput = document.querySelector('input[type="file"]');
+formData.append('image', fileInput.files[0]);
+
+const response = await fetch('/api/image/upload', {
+  method: 'POST',
+  body: formData
+});
+
+const data = await response.json();
+console.log(data.url);
+```
+
+```python Python
+import requests
+
+url = 'http://localhost:3000/api/image/upload'
+files = {'image': open('photo.jpg', 'rb')}
+
+response = requests.post(url, files=files)
+data = response.json()
+print(data['url'])
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Always `true` on successful upload
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Direct URL to the uploaded image (suitable for analysis)
+</ResponseField>
+
+<ResponseField name="displayUrl" type="string">
+  Alternative display URL (may be different for some CDN configurations)
+</ResponseField>
+
+<ResponseField name="deleteUrl" type="string">
+  URL to delete the image before expiration
+</ResponseField>
+
+<ResponseField name="expiration" type="number">
+  Time in seconds until the image expires (default: 600)
+</ResponseField>
+
+#### Success Response
+
+```json
+{
+  "success": true,
+  "url": "https://i.ibb.co/abc123/image.jpg",
+  "displayUrl": "https://ibb.co/xyz789",
+  "deleteUrl": "https://ibb.co/abc123/delete_token",
+  "expiration": 600
+}
+```
+
+### Error Responses
+
+<ResponseField name="400" type="No image file">
+  ```json
+  {
+    "error": "No image file provided"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="400" type="File too large">
+  ```json
+  {
+    "error": "File too large. Maximum size is 32000KB"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="500" type="API key not configured">
+  ```json
+  {
+    "error": "ImgBB API key not configured"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="500" type="Upload failed">
+  ```json
+  {
+    "error": "Upload failed"
+  }
+  ```
+</ResponseField>
+
+## Analyze Image
+
+Extract EXIF metadata from an image URL.
+
+### Endpoint
+
+```
+POST /api/image/analyze
+```
+
+### Request
+
+#### Headers
+
+```
+Content-Type: application/json
+```
+
+#### Body Parameters
+
+<ParamField path="imageUrl" type="string" required>
+  URL of the image to analyze. Must be a valid, accessible URL.
+  
+  Typically the `url` returned from the upload endpoint.
+  
+  **Example**: `"https://i.ibb.co/abc123/image.jpg"`
+</ParamField>
+
+### Request Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:3000/api/image/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "imageUrl": "https://i.ibb.co/abc123/image.jpg"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/image/analyze', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    imageUrl: 'https://i.ibb.co/abc123/image.jpg'
+  })
+});
+
+const data = await response.json();
+console.log(data.metadata);
+```
+
+```python Python
+import requests
+
+url = 'http://localhost:3000/api/image/analyze'
+data = {
+    'imageUrl': 'https://i.ibb.co/abc123/image.jpg'
+}
+
+response = requests.post(url, json=data)
+metadata = response.json()['metadata']
+print(metadata)
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if analysis was successful
+</ResponseField>
+
+<ResponseField name="imageUrl" type="string">
+  The URL of the analyzed image
+</ResponseField>
+
+<ResponseField name="metadata" type="ImageMetadata">
+  Extracted EXIF metadata from the image
+  
+  <Expandable title="ImageMetadata properties">
+    <ResponseField name="width" type="number">
+      Image width in pixels
+    </ResponseField>
+    
+    <ResponseField name="height" type="number">
+      Image height in pixels
+    </ResponseField>
+    
+    <ResponseField name="dateTaken" type="string">
+      ISO 8601 formatted date when the photo was taken
+    </ResponseField>
+    
+    <ResponseField name="dateModified" type="string">
+      ISO 8601 formatted date when the photo was last modified
+    </ResponseField>
+    
+    <ResponseField name="camera" type="CameraInfo">
+      Camera/device information
+      
+      <Expandable title="CameraInfo properties">
+        <ResponseField name="make" type="string">
+          Camera manufacturer (e.g., "Canon", "Apple")
+        </ResponseField>
+        
+        <ResponseField name="model" type="string">
+          Camera model (e.g., "iPhone 13 Pro", "EOS 5D")
+        </ResponseField>
+        
+        <ResponseField name="software" type="string">
+          Software used to process the image
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="exposure" type="ExposureInfo">
+      Camera exposure settings
+      
+      <Expandable title="ExposureInfo properties">
+        <ResponseField name="aperture" type="string">
+          Aperture value (e.g., "f/2.8")
+        </ResponseField>
+        
+        <ResponseField name="shutterSpeed" type="string">
+          Shutter speed (e.g., "1/250s")
+        </ResponseField>
+        
+        <ResponseField name="iso" type="number">
+          ISO sensitivity value
+        </ResponseField>
+        
+        <ResponseField name="focalLength" type="string">
+          Focal length (e.g., "50mm")
+        </ResponseField>
+        
+        <ResponseField name="flash" type="string">
+          Flash status ("Fired" or "Not fired")
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="gps" type="GpsCoordinates">
+      GPS location data if available
+      
+      <Expandable title="GpsCoordinates properties">
+        <ResponseField name="latitude" type="number">
+          Latitude in decimal degrees
+        </ResponseField>
+        
+        <ResponseField name="longitude" type="number">
+          Longitude in decimal degrees
+        </ResponseField>
+        
+        <ResponseField name="altitude" type="number">
+          Altitude in meters (if available)
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="orientation" type="number">
+      EXIF orientation value (1-8)
+    </ResponseField>
+    
+    <ResponseField name="colorSpace" type="string">
+      Color space ("sRGB" or "Adobe RGB")
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### Success Response
+
+```json
+{
+  "success": true,
+  "imageUrl": "https://i.ibb.co/abc123/image.jpg",
+  "metadata": {
+    "width": 4032,
+    "height": 3024,
+    "dateTaken": "2024-01-15T14:30:00Z",
+    "dateModified": "2024-01-15T14:30:05Z",
+    "camera": {
+      "make": "Apple",
+      "model": "iPhone 13 Pro",
+      "software": "16.3"
+    },
+    "exposure": {
+      "aperture": "f/1.5",
+      "shutterSpeed": "1/120s",
+      "iso": 100,
+      "focalLength": "5.7mm",
+      "flash": "Not fired"
+    },
+    "gps": {
+      "latitude": 37.7749,
+      "longitude": -122.4194,
+      "altitude": 16.2
+    },
+    "orientation": 1,
+    "colorSpace": "sRGB"
+  }
+}
+```
+
+#### No Metadata Response
+
+If the image has no EXIF data:
+
+```json
+{
+  "success": true,
+  "imageUrl": "https://i.ibb.co/abc123/image.jpg",
+  "metadata": {}
+}
+```
+
+### Error Responses
+
+<ResponseField name="400" type="Invalid image URL">
+  ```json
+  {
+    "error": "Invalid image URL"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="400" type="Invalid URL format">
+  ```json
+  {
+    "error": "Invalid URL format"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="500" type="Analysis failed">
+  ```json
+  {
+    "success": false,
+    "error": "Failed to analyze image"
+  }
+  ```
+</ResponseField>
+
+## Configuration
+
+Set these environment variables for image upload:
+
+```bash
+# Required: ImgBB API key
+IMGBB_API_KEY=your_imgbb_api_key
+
+# Optional: Max file size in KB (default: 32000)
+MAX_IMAGE_SIZE=32000
+
+# Optional: Image expiration in seconds (default: 600)
+IMAGE_EXPIRY=600
+```
+
+<Note>
+Get a free ImgBB API key at [https://api.imgbb.com/](https://api.imgbb.com/)
+</Note>
+
+## Source Code Reference
+
+- Upload Route: `source/app/api/image/upload/route.ts:9`
+- Analyze Route: `source/app/api/image/analyze/route.ts:7`
+- Metadata Extraction: `source/lib/image/metadata.ts:8`
+- Type Definitions: `source/lib/image/types.ts`
+
+## Best Practices
+
+<Warning>
+**Privacy**: EXIF data can contain sensitive information like GPS coordinates. Handle with care and inform users.
+</Warning>
+
+### Recommendations
+
+1. **Strip metadata**: Consider offering an option to remove EXIF data
+2. **Validate URLs**: Ensure image URLs are from trusted sources
+3. **Handle missing data**: Not all images contain EXIF metadata
+4. **GPS accuracy**: GPS coordinates may not be exact
+5. **Expiration handling**: Download or cache analysis results before expiration
+
+## Complete Workflow Example
+
+```typescript
+interface ImageMetadata {
+  width?: number;
+  height?: number;
+  dateTaken?: string;
+  camera?: {
+    make?: string;
+    model?: string;
+  };
+  gps?: {
+    latitude: number;
+    longitude: number;
+    altitude?: number;
+  };
+}
+
+async function analyzeImage(file: File): Promise<ImageMetadata> {
+  // Step 1: Upload the image
+  const formData = new FormData();
+  formData.append('image', file);
+  
+  const uploadResponse = await fetch('/api/image/upload', {
+    method: 'POST',
+    body: formData
+  });
+  
+  const { url } = await uploadResponse.json();
+  
+  // Step 2: Analyze the uploaded image
+  const analyzeResponse = await fetch('/api/image/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageUrl: url })
+  });
+  
+  const { metadata } = await analyzeResponse.json();
+  
+  return metadata;
+}
+
+// Usage
+const fileInput = document.querySelector('input[type="file"]');
+const metadata = await analyzeImage(fileInput.files[0]);
+
+if (metadata.gps) {
+  console.log(`Location: ${metadata.gps.latitude}, ${metadata.gps.longitude}`);
+}
+
+if (metadata.camera) {
+  console.log(`Camera: ${metadata.camera.make} ${metadata.camera.model}`);
+}
+```

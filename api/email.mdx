@@ -1,0 +1,501 @@
+---
+title: Email Verification API
+description: Verify email addresses, check deliverability, and assess risk scores using IPQualityScore
+---
+
+## Overview
+
+The Email Verification API validates email addresses and provides comprehensive risk analysis including:
+
+- Format validation and syntax checking
+- Domain and MX record verification
+- Disposable email detection
+- Spam trap and honeypot identification
+- Fraud risk scoring
+- Data breach detection
+- Associated accounts information
+
+<Note>
+This endpoint requires an IPQualityScore API key. Set `IPQUALITYSCORE_API_KEY` in your environment variables.
+</Note>
+
+## Endpoint
+
+```
+POST /api/email/verify
+```
+
+## Request
+
+### Headers
+
+```
+Content-Type: application/json
+```
+
+### Body Parameters
+
+<ParamField path="email" type="string" required>
+  Email address to verify. Must be a valid email format.
+  
+  Will be automatically trimmed and converted to lowercase.
+  
+  **Example**: `"user@example.com"`
+</ParamField>
+
+### Request Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:3000/api/email/verify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/email/verify', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    email: 'user@example.com'
+  })
+});
+
+const data = await response.json();
+console.log(data.result);
+```
+
+```python Python
+import requests
+
+url = 'http://localhost:3000/api/email/verify'
+data = {'email': 'user@example.com'}
+
+response = requests.post(url, json=data)
+result = response.json()['result']
+print(result)
+```
+</CodeGroup>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Always `true` for successful verification requests
+</ResponseField>
+
+<ResponseField name="result" type="EmailVerificationResult">
+  Comprehensive email verification data
+  
+  <Expandable title="EmailVerificationResult properties">
+    
+    ### Core Validation
+    
+    <ResponseField name="valid" type="boolean">
+      Overall email validity (true if email exists and is deliverable)
+    </ResponseField>
+    
+    <ResponseField name="disposable" type="boolean">
+      Whether the email is from a disposable/temporary email provider
+    </ResponseField>
+    
+    <ResponseField name="catchAll" type="boolean">
+      Whether the domain accepts all emails (catch-all configuration)
+    </ResponseField>
+    
+    ### Risk Scoring
+    
+    <ResponseField name="fraudScore" type="number">
+      Overall fraud risk score (0-100, higher = more risky)
+    </ResponseField>
+    
+    <ResponseField name="spamTrapScore" type="string">
+      Likelihood of being a spam trap ("none", "low", "medium", "high")
+    </ResponseField>
+    
+    <ResponseField name="recentAbuse" type="boolean">
+      Email has been recently associated with abusive behavior
+    </ResponseField>
+    
+    <ResponseField name="leaked" type="boolean">
+      Email appears in known data breaches
+    </ResponseField>
+    
+    <ResponseField name="frequentComplainer" type="boolean">
+      User frequently marks emails as spam
+    </ResponseField>
+    
+    ### Deliverability
+    
+    <ResponseField name="deliverability" type="string">
+      Email deliverability status ("high", "medium", "low", "undeliverable")
+    </ResponseField>
+    
+    <ResponseField name="dnsValid" type="boolean">
+      Domain has valid DNS records
+    </ResponseField>
+    
+    <ResponseField name="mxRecords" type="boolean">
+      Domain has valid MX (mail exchange) records
+    </ResponseField>
+    
+    <ResponseField name="smtpScore" type="number">
+      SMTP validation score (0-4, higher = more validated)
+    </ResponseField>
+    
+    ### Email Details
+    
+    <ResponseField name="sanitizedEmail" type="string">
+      Cleaned and standardized email address
+    </ResponseField>
+    
+    <ResponseField name="suggestedDomain" type="string">
+      Suggested domain if typo detected (e.g., "gmail.com" for "gmai.com")
+    </ResponseField>
+    
+    <ResponseField name="honeypot" type="boolean">
+      Email is a honeypot trap
+    </ResponseField>
+    
+    <ResponseField name="generic" type="boolean">
+      Email uses a generic/role-based address (info@, admin@, support@)
+    </ResponseField>
+    
+    <ResponseField name="common" type="boolean">
+      Email is from a common free email provider
+    </ResponseField>
+    
+    ### Domain Information
+    
+    <ResponseField name="domainAge" type="object">
+      Domain registration age
+      
+      <Expandable title="domainAge properties">
+        <ResponseField name="human" type="string">
+          Human-readable age (e.g., "5 years")
+        </ResponseField>
+        
+        <ResponseField name="timestamp" type="number">
+          Unix timestamp of domain registration
+        </ResponseField>
+        
+        <ResponseField name="iso" type="string">
+          ISO 8601 formatted date
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    ### Account Information
+    
+    <ResponseField name="firstSeen" type="object">
+      When this email was first observed
+      
+      <Expandable title="firstSeen properties">
+        <ResponseField name="human" type="string">
+          Human-readable time (e.g., "3 months ago")
+        </ResponseField>
+        
+        <ResponseField name="timestamp" type="number">
+          Unix timestamp
+        </ResponseField>
+        
+        <ResponseField name="iso" type="string">
+          ISO 8601 formatted date
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="userActivity" type="string">
+      User activity level ("high", "medium", "low", "none")
+    </ResponseField>
+    
+    <ResponseField name="overallScore" type="number">
+      Combined quality score (0-100, higher = better)
+    </ResponseField>
+    
+    ### Associated Data
+    
+    <ResponseField name="associatedNames" type="string[]">
+      Names associated with this email address
+    </ResponseField>
+    
+    <ResponseField name="associatedPhoneNumbers" type="string[]">
+      Phone numbers associated with this email
+    </ResponseField>
+    
+    ### Request Information
+    
+    <ResponseField name="message" type="string">
+      Human-readable status message
+    </ResponseField>
+    
+    <ResponseField name="requestId" type="string">
+      Unique identifier for this verification request
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response Example
+
+<CodeGroup>
+```json Valid Email
+{
+  "success": true,
+  "result": {
+    "valid": true,
+    "disposable": false,
+    "catchAll": false,
+    "fraudScore": 12,
+    "spamTrapScore": "none",
+    "recentAbuse": false,
+    "leaked": false,
+    "frequentComplainer": false,
+    "deliverability": "high",
+    "dnsValid": true,
+    "mxRecords": true,
+    "smtpScore": 3,
+    "sanitizedEmail": "user@example.com",
+    "honeypot": false,
+    "generic": false,
+    "common": false,
+    "domainAge": {
+      "human": "15 years",
+      "timestamp": 1234567890,
+      "iso": "2009-02-13T23:31:30Z"
+    },
+    "firstSeen": {
+      "human": "2 years ago",
+      "timestamp": 1609459200,
+      "iso": "2021-01-01T00:00:00Z"
+    },
+    "userActivity": "high",
+    "overallScore": 88,
+    "associatedNames": ["John Doe"],
+    "associatedPhoneNumbers": [],
+    "message": "Success",
+    "requestId": "abc123xyz"
+  }
+}
+```
+
+```json Disposable Email
+{
+  "success": true,
+  "result": {
+    "valid": false,
+    "disposable": true,
+    "catchAll": false,
+    "fraudScore": 85,
+    "spamTrapScore": "high",
+    "recentAbuse": true,
+    "leaked": false,
+    "frequentComplainer": false,
+    "deliverability": "undeliverable",
+    "dnsValid": true,
+    "mxRecords": true,
+    "smtpScore": 0,
+    "sanitizedEmail": "temp@10minutemail.com",
+    "honeypot": false,
+    "generic": false,
+    "common": false,
+    "userActivity": "none",
+    "overallScore": 15,
+    "associatedNames": [],
+    "associatedPhoneNumbers": [],
+    "message": "Disposable email detected",
+    "requestId": "def456uvw"
+  }
+}
+```
+
+```json Invalid Format
+{
+  "success": true,
+  "result": {
+    "valid": false,
+    "disposable": false,
+    "catchAll": false,
+    "fraudScore": 0,
+    "spamTrapScore": "none",
+    "recentAbuse": false,
+    "leaked": false,
+    "frequentComplainer": false,
+    "deliverability": "undeliverable",
+    "dnsValid": false,
+    "mxRecords": false,
+    "smtpScore": 0,
+    "sanitizedEmail": "invalid-email",
+    "suggestedDomain": "gmail.com",
+    "honeypot": false,
+    "generic": false,
+    "common": false,
+    "userActivity": "none",
+    "overallScore": 0,
+    "associatedNames": [],
+    "associatedPhoneNumbers": [],
+    "message": "Invalid email format",
+    "requestId": "ghi789rst"
+  }
+}
+```
+</CodeGroup>
+
+## Error Responses
+
+<ResponseField name="400" type="Invalid email address">
+  ```json
+  {
+    "success": false,
+    "error": "Invalid email address"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="400" type="Invalid email format">
+  ```json
+  {
+    "success": false,
+    "error": "Invalid email format"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="500" type="Verification failed">
+  ```json
+  {
+    "success": false,
+    "error": "Verification failed"
+  }
+  ```
+</ResponseField>
+
+## Configuration
+
+Set this environment variable to enable email verification:
+
+```bash
+# Required: IPQualityScore API key
+IPQUALITYSCORE_API_KEY=your_ipqs_api_key
+```
+
+<Note>
+Get an IPQualityScore API key at [https://www.ipqualityscore.com/](https://www.ipqualityscore.com/)
+</Note>
+
+## Source Code Reference
+
+- API Route: `source/app/api/email/verify/route.ts:7`
+- Email Verification: `source/lib/email/verify.ts`
+- Type Definitions: `source/lib/email/types.ts`
+
+## Risk Assessment Guide
+
+### Fraud Score Interpretation
+
+<Tabs>
+  <Tab title="0-25 (Low Risk)">
+    **Safe to accept**
+    
+    - High deliverability
+    - No abuse history
+    - Established domain
+    - Valid MX records
+  </Tab>
+  <Tab title="26-50 (Medium Risk)">
+    **Review recommended**
+    
+    - New domain or email
+    - Limited activity
+    - Generic email provider
+    - No major red flags
+  </Tab>
+  <Tab title="51-75 (High Risk)">
+    **Caution advised**
+    
+    - Recent abuse reports
+    - Suspicious patterns
+    - Low quality domain
+    - Consider additional verification
+  </Tab>
+  <Tab title="76-100 (Critical Risk)">
+    **Block or reject**
+    
+    - Disposable email
+    - Known spam trap
+    - Data breach victim
+    - High abuse history
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<Warning>
+**Rate Limits**: IPQualityScore has API rate limits. Cache results and avoid redundant checks.
+</Warning>
+
+### Recommendations
+
+1. **Cache results**: Store verification results to reduce API calls
+2. **Gradual validation**: Check format first, then DNS, then full verification
+3. **User-friendly errors**: Don't expose technical details to end users
+4. **Typo suggestions**: Use `suggestedDomain` to help users fix mistakes
+5. **Privacy compliance**: Inform users about verification checks
+
+## Example Implementation
+
+```typescript
+interface EmailRiskAssessment {
+  email: string;
+  isValid: boolean;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  reasons: string[];
+}
+
+async function assessEmail(email: string): Promise<EmailRiskAssessment> {
+  const response = await fetch('/api/email/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  });
+
+  const { result } = await response.json();
+  
+  // Determine risk level
+  let riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  if (result.fraudScore < 25) riskLevel = 'low';
+  else if (result.fraudScore < 50) riskLevel = 'medium';
+  else if (result.fraudScore < 75) riskLevel = 'high';
+  else riskLevel = 'critical';
+  
+  // Build list of risk factors
+  const reasons: string[] = [];
+  if (result.disposable) reasons.push('Disposable email provider');
+  if (result.recentAbuse) reasons.push('Recent abuse reports');
+  if (result.leaked) reasons.push('Found in data breaches');
+  if (result.honeypot) reasons.push('Honeypot trap detected');
+  if (result.spamTrapScore !== 'none') reasons.push('Potential spam trap');
+  if (!result.mxRecords) reasons.push('No valid MX records');
+  if (result.deliverability === 'undeliverable') reasons.push('Undeliverable');
+  
+  return {
+    email: result.sanitizedEmail,
+    isValid: result.valid && riskLevel !== 'critical',
+    riskLevel,
+    reasons
+  };
+}
+
+// Usage
+const assessment = await assessEmail('user@example.com');
+
+if (assessment.riskLevel === 'critical') {
+  console.error('Email rejected:', assessment.reasons);
+} else if (assessment.riskLevel === 'high') {
+  console.warn('Email flagged:', assessment.reasons);
+} else {
+  console.log('Email accepted');
+}
+```

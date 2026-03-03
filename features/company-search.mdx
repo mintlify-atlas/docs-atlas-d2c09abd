@@ -1,0 +1,604 @@
+---
+title: "Company Search"
+description: "Research companies using Companies House (UK), GLEIF LEI, and SEC EDGAR databases"
+---
+
+The Company Search feature provides comprehensive company intelligence by querying multiple authoritative databases across different jurisdictions.
+
+## How It Works
+
+Company search aggregates data from three major sources:
+
+<Steps>
+  <Step title="Enter Company Name">
+    Input the company name, registration number, ticker symbol, or LEI code. The search works with partial matches and fuzzy matching.
+  </Step>
+  
+  <Step title="Multi-Source Search">
+    Iris queries three databases in parallel:
+    - **Companies House** - UK company registry
+    - **GLEIF** - Global LEI database
+    - **SEC EDGAR** - US public company filings
+  </Step>
+  
+  <Step title="Company Details">
+    For matching companies, retrieve:
+    - Registration information
+    - Corporate structure
+    - Officers and directors
+    - Filing history
+    - Financial information
+    - Legal entity identifiers
+  </Step>
+  
+  <Step title="Cross-Reference">
+    Compare data across sources to get a complete picture of multinational companies or verify information consistency.
+  </Step>
+</Steps>
+
+## Data Sources
+
+<Tabs>
+  <Tab title="Companies House">
+    **UK Companies Registry**
+    
+    Official register of companies in the United Kingdom.
+    
+    **Coverage:**
+    - All UK registered companies
+    - Limited companies
+    - Public limited companies (PLCs)
+    - Limited liability partnerships (LLPs)
+    - Community interest companies (CICs)
+    
+    **Available Data:**
+    - Company number and status
+    - Registered office address
+    - Incorporation date
+    - Company type and SIC codes
+    - Directors and officers
+    - Filing history
+    - Accounts and confirmation statements
+    - Charges and insolvency records
+    
+    <Info>
+      Companies House data is updated in real-time from the UK government's official API.
+    </Info>
+  </Tab>
+  
+  <Tab title="GLEIF">
+    **Global Legal Entity Identifier Foundation**
+    
+    International database of Legal Entity Identifiers (LEI) for entities participating in financial transactions.
+    
+    **Coverage:**
+    - 2.5+ million legal entities worldwide
+    - Financial institutions
+    - Publicly traded companies
+    - Large private companies
+    - Government entities
+    
+    **Available Data:**
+    - 20-character LEI code
+    - Legal name and alternate names
+    - Legal address and headquarters
+    - Registration authority
+    - Legal form and jurisdiction
+    - Entity status
+    - Registration and renewal dates
+    - Managing LOU (Local Operating Unit)
+    
+    <Note>
+      LEI codes are required for many financial transactions in Europe and increasingly worldwide.
+    </Note>
+  </Tab>
+  
+  <Tab title="SEC EDGAR">
+    **U.S. Securities and Exchange Commission**
+    
+    Official database of public company filings in the United States.
+    
+    **Coverage:**
+    - All US publicly traded companies
+    - Foreign companies trading in US markets
+    - Investment companies
+    - Municipal securities issuers
+    
+    **Available Data:**
+    - CIK (Central Index Key)
+    - Company name and tickers
+    - Exchange listings (NYSE, NASDAQ)
+    - SIC code and description
+    - Fiscal year end
+    - State of incorporation
+    - Business and mailing addresses
+    - Recent SEC filings (10-K, 10-Q, 8-K, etc.)
+    - XBRL financial data
+    
+    <Warning>
+      SEC EDGAR requires a User-Agent header with contact information. Iris includes this automatically.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Companies House Integration
+
+### Search Companies
+
+```typescript lib/company/companies-house.ts:22
+export async function searchCompanies(query: string, limit: number = 10): Promise<Array<{
+    company_number: string;
+    title: string;
+    company_status: string;
+    company_type: string;
+    date_of_creation?: string;
+    address_snippet?: string;
+}>> {
+    const url = `${API_BASE}/search/companies?q=${encodeURIComponent(query)}&items_per_page=${limit}`;
+    
+    const response = await fetch(url, {
+        headers: {
+            'Authorization': getAuthHeader(),
+            'Accept': 'application/json',
+        },
+    });
+    
+    const data = await response.json();
+    return data.items || [];
+}
+```
+
+<Accordion title="Company Status Codes">
+  **Active Statuses:**
+  - `active` - Company is active and trading
+  - `open` - Company is open for business
+  
+  **Inactive Statuses:**
+  - `dissolved` - Company has been closed
+  - `liquidation` - Company is being wound up
+  - `receivership` - Company under receivership
+  - `administration` - Company in administration
+  - `voluntary-arrangement` - Company in CVA
+  - `insolvency-proceedings` - Insolvency proceedings active
+</Accordion>
+
+### Company Details
+
+```typescript lib/company/companies-house.ts:69
+export async function getCompanyDetails(companyNumber: string): Promise<CompaniesHouseCompany | null> {
+    const url = `${API_BASE}/company/${companyNumber}`;
+    
+    const response = await fetch(url, {
+        headers: {
+            'Authorization': getAuthHeader(),
+            'Accept': 'application/json',
+        },
+    });
+    
+    return await response.json();
+}
+```
+
+**Retrieved Information:**
+```typescript lib/company/types.ts:6
+export interface CompaniesHouseCompany {
+    company_number: string;
+    company_name: string;
+    company_status: string;
+    company_type: string;
+    date_of_creation?: string;
+    date_of_cessation?: string;
+    registered_office_address?: {
+        address_line_1?: string;
+        address_line_2?: string;
+        locality?: string;
+        region?: string;
+        postal_code?: string;
+        country?: string;
+    };
+    sic_codes?: string[];        // Standard Industrial Classification
+    accounts?: {                 // Financial accounts info
+        last_accounts?: {
+            made_up_to?: string;
+            type?: string;
+        };
+        next_due?: string;
+    };
+    has_charges?: boolean;       // Secured loans/mortgages
+    has_insolvency_history?: boolean;
+    jurisdiction?: string;
+}
+```
+
+### Officers & Directors
+
+```typescript lib/company/companies-house.ts:100
+export async function getCompanyOfficers(companyNumber: string, limit: number = 20): Promise<CompaniesHouseOfficer[]> {
+    const url = `${API_BASE}/company/${companyNumber}/officers?items_per_page=${limit}`;
+    // ... fetch and return officers
+}
+```
+
+**Officer Information:**
+```typescript lib/company/types.ts:44
+export interface CompaniesHouseOfficer {
+    name: string;
+    officer_role: string;        // director, secretary, llp-member
+    appointed_on?: string;
+    resigned_on?: string;
+    nationality?: string;
+    country_of_residence?: string;
+    occupation?: string;
+    date_of_birth?: {
+        month: number;           // Month only for privacy
+        year: number;
+    };
+}
+```
+
+<Info>
+  For privacy, only the birth month and year are provided, not the full date.
+</Info>
+
+### Filing History
+
+```typescript lib/company/companies-house.ts:142
+export async function getCompanyFilings(companyNumber: string, limit: number = 10): Promise<CompaniesHouseFiling[]> {
+    const url = `${API_BASE}/company/${companyNumber}/filing-history?items_per_page=${limit}`;
+    // ... fetch and return filings
+}
+```
+
+**Common Filing Types:**
+- **AA** - Annual accounts
+- **CS01** - Confirmation statement
+- **AP01** - Appointment of director
+- **CH01** - Change of director details
+- **TM01** - Termination of director appointment
+- **AD01** - Change of registered office address
+
+## GLEIF LEI Integration
+
+### Search by Company Name
+
+```typescript lib/company/gleif.ts:9
+export async function searchLeiByName(query: string, limit: number = 10): Promise<{
+    records: GleifLeiRecord[];
+    totalCount: number;
+}> {
+    // Use fulltext search for fuzzy matching
+    const url = `${API_BASE}/lei-records?filter[fulltext]=${encodeURIComponent(query)}&page[size]=${limit}`;
+    
+    const response = await fetch(url, {
+        headers: {
+            'Accept': 'application/vnd.api+json',
+        },
+    });
+    
+    const data = await response.json();
+    return {
+        records: data.data || [],
+        totalCount: data.meta?.pagination?.total || 0,
+    };
+}
+```
+
+<Note>
+  GLEIF's fulltext search uses fuzzy matching and handles typos, alternate spellings, and partial matches.
+</Note>
+
+### LEI Record Structure
+
+```typescript lib/company/types.ts:68
+export interface GleifLeiRecord {
+    lei: string;                 // 20-character LEI code
+    entity: {
+        legalName: {
+            name: string;
+            language?: string;
+        };
+        otherNames?: Array<{
+            name: string;
+            type: string;        // trading-as, previous-legal-name
+        }>;
+        legalAddress: {          // Official registered address
+            addressLines: string[];
+            city: string;
+            region?: string;
+            country: string;     // ISO 3166-1 alpha-2
+            postalCode?: string;
+        };
+        headquartersAddress?: {  // Actual HQ if different
+            addressLines: string[];
+            city: string;
+            country: string;
+        };
+        registeredAt?: {
+            id: string;          // Registration authority ID
+            other?: string;
+        };
+        registeredAs?: string;   // Local registration number
+        jurisdiction?: string;   // ISO 3166-1 alpha-2
+        legalForm?: {            // Corporate structure
+            id: string;
+            other?: string;
+        };
+        status: string;          // ACTIVE, INACTIVE
+        creationDate?: string;
+    };
+    registration: {
+        initialRegistrationDate: string;
+        lastUpdateDate: string;
+        status: string;          // ISSUED, LAPSED, etc.
+        nextRenewalDate?: string;
+        managingLou: string;     // LOU code
+        validationSources?: string;
+    };
+}
+```
+
+### Get LEI by Code
+
+```typescript lib/company/gleif.ts:89
+export async function getLeiRecord(lei: string): Promise<GleifLeiRecord | null> {
+    const url = `${API_BASE}/lei-records/${lei}`;
+    
+    const response = await fetch(url, {
+        headers: {
+            'Accept': 'application/vnd.api+json',
+        },
+    });
+    
+    if (response.status === 404) {
+        return null;
+    }
+    
+    const data = await response.json();
+    return data.data;
+}
+```
+
+<Info>
+  **LEI Format:** LEIs are 20-character alphanumeric codes like `549300HROIFWZSBE0A28`. They never expire but require annual renewal.
+</Info>
+
+## SEC EDGAR Integration
+
+### Search by Company Name
+
+```typescript lib/company/sec-edgar.ts:12
+export async function searchCompanies(query: string, limit: number = 10): Promise<Array<{
+    cik: string;
+    name: string;
+    tickers?: string[];
+}>> {
+    // Use the company tickers JSON file for searching
+    const tickersUrl = `${DATA_API_BASE}/files/company_tickers.json`;
+    
+    const response = await fetch(tickersUrl, {
+        headers: {
+            'User-Agent': USER_AGENT,  // Required by SEC
+            'Accept': 'application/json',
+        },
+    });
+    
+    const data = await response.json();
+    const queryLower = query.toLowerCase();
+    
+    // Search through companies
+    const results = [];
+    for (const key of Object.keys(data)) {
+        const company = data[key];
+        const name = (company.title || '').toLowerCase();
+        const ticker = (company.ticker || '').toLowerCase();
+        
+        if (name.includes(queryLower) || ticker.includes(queryLower)) {
+            results.push({
+                cik: String(company.cik_str).padStart(10, '0'),
+                name: company.title,
+                tickers: company.ticker ? [company.ticker] : [],
+            });
+        }
+        
+        if (results.length >= limit) break;
+    }
+    
+    return results;
+}
+```
+
+<Warning>
+  **SEC User-Agent Requirement:**
+  
+  The SEC requires all automated requests to include a User-Agent header with contact information. Failure to comply may result in IP blocking.
+  
+  ```typescript lib/company/sec-edgar.ts:7
+  const USER_AGENT = 'Iris OSINT Tool (hi@chinmay.lol)';
+  ```
+</Warning>
+
+### Company Details by CIK
+
+```typescript lib/company/sec-edgar.ts:72
+export async function getCompanyDetails(cik: string): Promise<SecEdgarCompany | null> {
+    // Pad CIK to 10 digits
+    const paddedCik = cik.replace(/^0+/, '').padStart(10, '0');
+    const url = `${DATA_API_BASE}/submissions/CIK${paddedCik}.json`;
+    
+    const response = await fetch(url, {
+        headers: {
+            'User-Agent': USER_AGENT,
+            'Accept': 'application/json',
+        },
+    });
+    
+    return await response.json();
+}
+```
+
+**CIK Format:** Central Index Keys are 10-digit numbers like `0000320193` (Apple Inc.)
+
+### Recent SEC Filings
+
+```typescript lib/company/sec-edgar.ts:133
+export async function getRecentFilings(cik: string, limit: number = 10): Promise<SecEdgarFiling[]> {
+    const url = `${DATA_API_BASE}/submissions/CIK${paddedCik}.json`;
+    const data = await response.json();
+    const filings = data.filings?.recent;
+    
+    const results: SecEdgarFiling[] = [];
+    for (let i = 0; i < limit; i++) {
+        results.push({
+            accessionNumber: filings.accessionNumber[i],
+            filingDate: filings.filingDate[i],
+            reportDate: filings.reportDate?.[i],
+            form: filings.form[i],
+            primaryDocument: filings.primaryDocument?.[i],
+            isXBRL: filings.isXBRL?.[i] === 1,
+        });
+    }
+    
+    return results;
+}
+```
+
+**Common SEC Forms:**
+- **10-K:** Annual report
+- **10-Q:** Quarterly report
+- **8-K:** Current report (material events)
+- **S-1:** Initial registration for IPO
+- **DEF 14A:** Proxy statement
+- **4:** Insider trading report
+- **13F:** Institutional investment holdings
+
+## Combined Search Results
+
+### Result Structure
+
+```typescript lib/company/types.ts:160
+export interface CompanyAnalysisResult {
+    query: string;
+    analyzedAt: string;
+    
+    // UK Companies House data
+    companiesHouse?: {
+        company?: CompaniesHouseCompany;
+        officers?: CompaniesHouseOfficer[];
+        filings?: CompaniesHouseFiling[];
+        searchResults?: Array<{/* ... */}>;
+    };
+    
+    // GLEIF LEI data
+    gleif?: {
+        records?: GleifLeiRecord[];
+        totalCount?: number;
+    };
+    
+    // SEC EDGAR data
+    secEdgar?: {
+        company?: SecEdgarCompany;
+        recentFilings?: SecEdgarFiling[];
+        searchResults?: Array<{/* ... */}>;
+    };
+    
+    // Errors from any source
+    errors?: {
+        companiesHouse?: string;
+        gleif?: string;
+        secEdgar?: string;
+    };
+}
+```
+
+## Use Cases
+
+### Due Diligence
+- Verify company registration and status
+- Check director appointments and resignations
+- Review financial filing history
+- Identify red flags (insolvency, charges)
+
+### Business Intelligence
+- Research competitors
+- Find company headquarters and addresses
+- Identify corporate structure
+- Track officer movements
+
+### Compliance & KYC
+- Verify Legal Entity Identifiers
+- Confirm company exists and is active
+- Check for sanctions or adverse media
+- Validate registration jurisdiction
+
+### Financial Research
+- Access SEC filings for public companies
+- Review financial statements
+- Track insider trading (Form 4)
+- Monitor material events (8-K filings)
+
+### Investigation
+- Map corporate relationships
+- Find hidden connections through shared officers
+- Track company name changes
+- Identify dissolved or inactive entities
+
+## API Configuration
+
+### Environment Variables
+
+```bash
+# Companies House API key
+COMPANIESHOUSE_API_KEY=your_api_key_here
+```
+
+<Info>
+  **Getting API Keys:**
+  
+  - **Companies House:** Register at [developer.companieshouse.gov.uk](https://developer.company-information.service.gov.uk/)
+  - **GLEIF:** No API key required (public API)
+  - **SEC EDGAR:** No API key required (just User-Agent header)
+</Info>
+
+## Best Practices
+
+<Note>
+  **Search Tips:**
+  
+  1. **Try multiple variations:** Company names may differ across databases
+  2. **Use registration numbers:** More reliable than name searches
+  3. **Check all sources:** Different databases may have different information
+  4. **Verify cross-references:** Confirm data consistency across sources
+  5. **Note the date:** Data may be outdated, check last update timestamps
+</Note>
+
+<Warning>
+  **Rate Limiting:**
+  
+  - **Companies House:** 600 requests per 5 minutes
+  - **GLEIF:** No official limits, but be respectful
+  - **SEC EDGAR:** 10 requests per second maximum
+  
+  Iris handles rate limiting automatically, but bulk searches may be delayed.
+</Warning>
+
+## Limitations
+
+<Accordion title="Geographic Coverage">
+  - **Companies House:** UK and Welsh companies only
+  - **GLEIF:** Global but only entities with LEI codes
+  - **SEC EDGAR:** US public companies and foreign filers
+  
+  Private companies in most countries are not covered.
+</Accordion>
+
+<Accordion title="Data Currency">
+  - Companies House: Real-time
+  - GLEIF: Updated daily
+  - SEC EDGAR: Updated daily after market close
+  
+  Very recent changes may not appear immediately.
+</Accordion>
+
+<Accordion title="Data Completeness">
+  Not all fields are available for all companies. Private information, historical data, and some financial details may be limited or redacted.
+</Accordion>
